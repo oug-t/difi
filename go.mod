@@ -1,4 +1,4 @@
-module github.com/oug-t/stagi
+module github.com/oug-t/difi
 
 go 1.25.6
 
