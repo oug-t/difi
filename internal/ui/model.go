@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/oug-t/difi/internal/config"
 	"github.com/oug-t/difi/internal/git"
 	"github.com/oug-t/difi/internal/tree"
 )
@@ -29,27 +30,26 @@ type Model struct {
 	fileTree     list.Model
 	diffViewport viewport.Model
 
-	// Data
 	selectedPath  string
 	currentBranch string
 	repoName      string
 
-	// Diff State
 	diffContent string
 	diffLines   []string
 	diffCursor  int
 
-	// Input State for Vim Motions
 	inputBuffer string
 
-	// UI State
 	focus    Focus
 	showHelp bool
 
 	width, height int
 }
 
-func NewModel() Model {
+func NewModel(cfg config.Config) Model {
+	// Initialize styles with the loaded config
+	InitStyles(cfg)
+
 	files, _ := git.ListChangedFiles(TargetBranch)
 	items := tree.Build(files)
 
@@ -101,7 +101,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
-	// Flag to track if we manually handled navigation
 	keyHandled := false
 
 	switch msg := msg.(type) {
@@ -155,9 +154,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, git.OpenEditorCmd(m.selectedPath, line)
 			}
 
-		// Vim Motions
 		case "j", "down":
-			keyHandled = true // Mark as handled so we don't pass to list.Update()
+			keyHandled = true
 			count := m.getRepeatCount()
 			for i := 0; i < count; i++ {
 				if m.focus == FocusDiff {
@@ -174,7 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.inputBuffer = ""
 
 		case "k", "up":
-			keyHandled = true // Mark as handled
+			keyHandled = true
 			count := m.getRepeatCount()
 			for i := 0; i < count; i++ {
 				if m.focus == FocusDiff {
@@ -195,7 +193,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Update Components
 	if m.focus == FocusTree {
 		if !keyHandled {
 			m.fileTree, cmd = m.fileTree.Update(msg)
@@ -251,6 +248,7 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// 1. PANES
 	treeStyle := PaneStyle
 	if m.focus == FocusTree {
 		treeStyle = FocusedPaneStyle
@@ -270,13 +268,43 @@ func (m Model) View() string {
 		end = len(m.diffLines)
 	}
 
+	// RENDER LOOP
 	for i := start; i < end; i++ {
 		line := m.diffLines[i]
 
-		// Relative Numbers
-		distance := int(math.Abs(float64(i - m.diffCursor)))
-		relNum := fmt.Sprintf("%d", distance)
-		lineNumStr := LineNumberStyle.Render(relNum)
+		// --- LINE NUMBER LOGIC ---
+		var numStr string
+		mode := CurrentConfig.UI.LineNumbers
+
+		if mode == "hidden" {
+			numStr = ""
+		} else {
+			// Is this the cursor line?
+			isCursor := (i == m.diffCursor)
+
+			if isCursor && mode == "hybrid" {
+				// HYBRID: Show Real File Line Number
+				realLine := git.CalculateFileLine(m.diffContent, m.diffCursor)
+				numStr = fmt.Sprintf("%d", realLine)
+			} else if isCursor && mode == "relative" {
+				numStr = "0"
+			} else if mode == "absolute" {
+				// Note: Calculating absolute for every line is expensive,
+				// usually absolute view shows Diff Line Index or File Line.
+				// For simple 'absolute' view, we often show viewport index + 1
+				numStr = fmt.Sprintf("%d", i+1)
+			} else {
+				// Default / Hybrid-non-cursor: Show Relative Distance
+				dist := int(math.Abs(float64(i - m.diffCursor)))
+				numStr = fmt.Sprintf("%d", dist)
+			}
+		}
+
+		lineNumRendered := ""
+		if numStr != "" {
+			lineNumRendered = LineNumberStyle.Render(numStr)
+		}
+		// -------------------------
 
 		if m.focus == FocusDiff && i == m.diffCursor {
 			line = SelectedItemStyle.Render(line)
@@ -284,7 +312,7 @@ func (m Model) View() string {
 			line = "  " + line
 		}
 
-		renderedDiff.WriteString(lineNumStr + line + "\n")
+		renderedDiff.WriteString(lineNumRendered + line + "\n")
 	}
 
 	diffView := DiffStyle.Copy().
@@ -294,6 +322,7 @@ func (m Model) View() string {
 
 	mainPanes := lipgloss.JoinHorizontal(lipgloss.Top, treeView, diffView)
 
+	// 2. BOTTOM AREA
 	repoSection := StatusKeyStyle.Render(" " + m.repoName)
 	divider := StatusDividerStyle.Render("│")
 
@@ -352,6 +381,7 @@ func (m Model) View() string {
 	return finalView
 }
 
+// -- Delegates (unchanged) --
 type listDelegate struct{}
 
 func (d listDelegate) Height() int                               { return 1 }
