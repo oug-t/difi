@@ -17,7 +17,7 @@ import (
 	"github.com/oug-t/difi/internal/tree"
 )
 
-const TargetBranch = "main"
+// REMOVED: const TargetBranch = "main" (Now dynamic)
 
 type Focus int
 
@@ -33,6 +33,7 @@ type Model struct {
 
 	selectedPath  string
 	currentBranch string
+	targetBranch  string // Added field for dynamic target
 	repoName      string
 
 	diffContent string
@@ -47,10 +48,12 @@ type Model struct {
 	width, height int
 }
 
-func NewModel(cfg config.Config) Model {
+// Updated Signature: Accepts targetBranch string
+func NewModel(cfg config.Config, targetBranch string) Model {
 	InitStyles(cfg)
 
-	files, _ := git.ListChangedFiles(TargetBranch)
+	// Use the dynamic targetBranch variable
+	files, _ := git.ListChangedFiles(targetBranch)
 	items := tree.Build(files)
 
 	delegate := TreeDelegate{Focused: true}
@@ -69,6 +72,7 @@ func NewModel(cfg config.Config) Model {
 		diffViewport:  viewport.New(0, 0),
 		focus:         FocusTree,
 		currentBranch: git.GetCurrentBranch(),
+		targetBranch:  targetBranch, // Store it
 		repoName:      git.GetRepoName(),
 		showHelp:      false,
 		inputBuffer:   "",
@@ -84,7 +88,8 @@ func NewModel(cfg config.Config) Model {
 
 func (m Model) Init() tea.Cmd {
 	if m.selectedPath != "" {
-		return git.DiffCmd(TargetBranch, m.selectedPath)
+		// Use m.targetBranch instead of constant
+		return git.DiffCmd(m.targetBranch, m.selectedPath)
 	}
 	return nil
 }
@@ -211,7 +216,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedPath = item.FullPath
 				m.diffCursor = 0
 				m.diffViewport.GotoTop()
-				cmds = append(cmds, git.DiffCmd(TargetBranch, m.selectedPath))
+				// Use m.targetBranch
+				cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
 			}
 		}
 	}
@@ -223,7 +229,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffViewport.SetContent(msg.Content)
 
 	case git.EditorFinishedMsg:
-		return m, git.DiffCmd(TargetBranch, m.selectedPath)
+		// Use m.targetBranch
+		return m, git.DiffCmd(m.targetBranch, m.selectedPath)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -260,7 +267,6 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// 1. PANES
 	treeStyle := PaneStyle
 	if m.focus == FocusTree {
 		treeStyle = FocusedPaneStyle
@@ -280,11 +286,9 @@ func (m Model) View() string {
 		end = len(m.diffLines)
 	}
 
-	// RENDER LOOP
 	for i := start; i < end; i++ {
 		line := m.diffLines[i]
 
-		// --- LINE NUMBERS ---
 		var numStr string
 		mode := CurrentConfig.UI.LineNumbers
 
@@ -310,7 +314,6 @@ func (m Model) View() string {
 			lineNumRendered = LineNumberStyle.Render(numStr)
 		}
 
-		// --- DIFF VIEW HIGHLIGHT ---
 		if m.focus == FocusDiff && i == m.diffCursor {
 			cleanLine := stripAnsi(line)
 			line = DiffSelectionStyle.Render("  " + cleanLine)
@@ -328,11 +331,11 @@ func (m Model) View() string {
 
 	mainPanes := lipgloss.JoinHorizontal(lipgloss.Top, treeView, diffView)
 
-	// 2. BOTTOM AREA
 	repoSection := StatusKeyStyle.Render(" " + m.repoName)
 	divider := StatusDividerStyle.Render("│")
 
-	statusText := fmt.Sprintf(" %s ↔ %s", m.currentBranch, TargetBranch)
+	// Use m.targetBranch in status bar
+	statusText := fmt.Sprintf(" %s ↔ %s", m.currentBranch, m.targetBranch)
 	if m.inputBuffer != "" {
 		statusText += fmt.Sprintf(" [Cmd: %s]", m.inputBuffer)
 	}
