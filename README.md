@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>The pixel-perfect terminal diff viewer.</strong><br />
+  <strong>A calm, focused way to review Git diffs.</strong><br />
   Review code with clarity. Polish before you push.
 </p>
 
@@ -14,13 +14,12 @@
   <img src="https://via.placeholder.com/800x450.png?text=Showcase+Your+UI+Here" alt="difi demo" width="100%" />
 </p>
 
-
 ## Why difi?
+
 - ⚡️ **Blazing Fast** — Built in Go. Starts instantly.
 - 🎨 **Semantic UI** — Split-pane layout with syntax highlighting and Nerd Font icons.
 - 🧠 **Context Aware** — Opens your editor (nvim/vim) at the exact line you are reviewing.
 - ⌨️ **Vim Native** — Navigate with `h j k l`. Zero mouse required.
-
 
 ## Installation
 
@@ -44,8 +43,10 @@ go install github.com/oug-t/difi/cmd/difi@latest
 - Download the binary from Releases and add it to your $PATH.
 
 ## Workflow
+
 - Run difi in any Git repository.
 - By default, it compares your current branch against main.
+
 ```bash
 cd my-project
 difi
@@ -53,14 +54,14 @@ difi
 
 ## Controls
 
-| Key | Action |
-|-----|--------|
-| `Tab` | Toggle focus between File Tree and Diff View |
-| `j / k` | Move cursor down / up |
-| `h / l` | Focus Left (Tree) / Focus Right (Diff) |
-| `e` / `Enter` | Edit file (opens editor at selected line) |
-| `?` | Toggle help drawer |
-| `q` | Quit |
+| Key           | Action                                       |
+| ------------- | -------------------------------------------- |
+| `Tab`         | Toggle focus between File Tree and Diff View |
+| `j / k`       | Move cursor down / up                        |
+| `h / l`       | Focus Left (Tree) / Focus Right (Diff)       |
+| `e` / `Enter` | Edit file (opens editor at selected line)    |
+| `?`           | Toggle help drawer                           |
+| `q`           | Quit                                         |
 
 ## Contributing
 
@@ -72,5 +73,7 @@ git clone https://github.com/oug-t/difi
 cd difi
 go run cmd/difi/main.go
 ```
+
 ---
-<p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p> 
+
+<p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>

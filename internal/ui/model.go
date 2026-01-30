@@ -17,8 +17,6 @@ import (
 	"github.com/oug-t/difi/internal/tree"
 )
 
-// REMOVED: const TargetBranch = "main" (Now dynamic)
-
 type Focus int
 
 const (
@@ -33,7 +31,7 @@ type Model struct {
 
 	selectedPath  string
 	currentBranch string
-	targetBranch  string // Added field for dynamic target
+	targetBranch  string
 	repoName      string
 
 	diffContent string
@@ -48,11 +46,9 @@ type Model struct {
 	width, height int
 }
 
-// Updated Signature: Accepts targetBranch string
 func NewModel(cfg config.Config, targetBranch string) Model {
 	InitStyles(cfg)
 
-	// Use the dynamic targetBranch variable
 	files, _ := git.ListChangedFiles(targetBranch)
 	items := tree.Build(files)
 
@@ -72,7 +68,7 @@ func NewModel(cfg config.Config, targetBranch string) Model {
 		diffViewport:  viewport.New(0, 0),
 		focus:         FocusTree,
 		currentBranch: git.GetCurrentBranch(),
-		targetBranch:  targetBranch, // Store it
+		targetBranch:  targetBranch,
 		repoName:      git.GetRepoName(),
 		showHelp:      false,
 		inputBuffer:   "",
@@ -88,7 +84,6 @@ func NewModel(cfg config.Config, targetBranch string) Model {
 
 func (m Model) Init() tea.Cmd {
 	if m.selectedPath != "" {
-		// Use m.targetBranch instead of constant
 		return git.DiffCmd(m.targetBranch, m.selectedPath)
 	}
 	return nil
@@ -119,6 +114,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateSizes()
 
 	case tea.KeyMsg:
+		if msg.String() == "q" || msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+
+		// If list is empty, ignore other keys
+		if len(m.fileTree.Items()) == 0 {
+			return m, nil
+		}
+
 		if len(msg.String()) == 1 && strings.ContainsAny(msg.String(), "0123456789") {
 			m.inputBuffer += msg.String()
 			return m, nil
@@ -128,10 +132,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showHelp = !m.showHelp
 			m.updateSizes()
 			return m, nil
-		}
-
-		if msg.String() == "q" || msg.String() == "ctrl+c" {
-			return m, tea.Quit
 		}
 
 		switch msg.String() {
@@ -205,7 +205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if m.focus == FocusTree {
+	if len(m.fileTree.Items()) > 0 && m.focus == FocusTree {
 		if !keyHandled {
 			m.fileTree, cmd = m.fileTree.Update(msg)
 			cmds = append(cmds, cmd)
@@ -216,7 +216,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedPath = item.FullPath
 				m.diffCursor = 0
 				m.diffViewport.GotoTop()
-				// Use m.targetBranch
 				cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
 			}
 		}
@@ -229,7 +228,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffViewport.SetContent(msg.Content)
 
 	case git.EditorFinishedMsg:
-		// Use m.targetBranch
 		return m, git.DiffCmd(m.targetBranch, m.selectedPath)
 	}
 
@@ -267,6 +265,12 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// EMPTY STATE CHECK
+	if len(m.fileTree.Items()) == 0 {
+		return m.viewEmptyState()
+	}
+
+	// 1. PANES
 	treeStyle := PaneStyle
 	if m.focus == FocusTree {
 		treeStyle = FocusedPaneStyle
@@ -331,10 +335,10 @@ func (m Model) View() string {
 
 	mainPanes := lipgloss.JoinHorizontal(lipgloss.Top, treeView, diffView)
 
+	// 2. BOTTOM AREA
 	repoSection := StatusKeyStyle.Render(" " + m.repoName)
 	divider := StatusDividerStyle.Render("│")
 
-	// Use m.targetBranch in status bar
 	statusText := fmt.Sprintf(" %s ↔ %s", m.currentBranch, m.targetBranch)
 	if m.inputBuffer != "" {
 		statusText += fmt.Sprintf(" [Cmd: %s]", m.inputBuffer)
@@ -388,6 +392,82 @@ func (m Model) View() string {
 	}
 
 	return finalView
+}
+
+// viewEmptyState renders a "Landing Page" when there are no changes
+func (m Model) viewEmptyState() string {
+	// 1. Logo & Tagline
+	logo := EmptyLogoStyle.Render("difi")
+	desc := EmptyDescStyle.Render("A calm, focused way to review Git diffs.")
+
+	// 2. Status Message
+	statusMsg := fmt.Sprintf("✓ No changes found against '%s'", m.targetBranch)
+	status := EmptyStatusStyle.Render(statusMsg)
+
+	// 3. Usage Guide
+	usageHeader := EmptyHeaderStyle.Render("Usage Patterns")
+
+	cmd1 := lipgloss.NewStyle().Foreground(ColorText).Render("difi")
+	desc1 := EmptyCodeStyle.Render("Diff against main")
+
+	cmd2 := lipgloss.NewStyle().Foreground(ColorText).Render("difi develop")
+	desc2 := EmptyCodeStyle.Render("Diff against target branch")
+
+	cmd3 := lipgloss.NewStyle().Foreground(ColorText).Render("difi HEAD~1")
+	desc3 := EmptyCodeStyle.Render("Diff against previous commit")
+
+	usageBlock := lipgloss.JoinVertical(lipgloss.Left,
+		usageHeader,
+		lipgloss.JoinHorizontal(lipgloss.Left, cmd1, desc1),
+		lipgloss.JoinHorizontal(lipgloss.Left, cmd2, desc2),
+		lipgloss.JoinHorizontal(lipgloss.Left, cmd3, desc3),
+	)
+
+	// 4. Navigation Guide
+	navHeader := EmptyHeaderStyle.Render("Navigation")
+
+	key1 := lipgloss.NewStyle().Foreground(ColorText).Render("Tab")
+	keyDesc1 := EmptyCodeStyle.Render("Switch panels")
+
+	key2 := lipgloss.NewStyle().Foreground(ColorText).Render("j / k")
+	keyDesc2 := EmptyCodeStyle.Render("Move cursor")
+
+	key3 := lipgloss.NewStyle().Foreground(ColorText).Render("?")
+	keyDesc3 := EmptyCodeStyle.Render("Toggle help")
+
+	navBlock := lipgloss.JoinVertical(lipgloss.Left,
+		navHeader,
+		lipgloss.JoinHorizontal(lipgloss.Left, key1, keyDesc1),
+		lipgloss.JoinHorizontal(lipgloss.Left, key2, keyDesc2),
+		lipgloss.JoinHorizontal(lipgloss.Left, key3, keyDesc3),
+	)
+
+	// Combine blocks
+	guides := lipgloss.JoinHorizontal(lipgloss.Top,
+		usageBlock,
+		lipgloss.NewStyle().Width(8).Render(""), // Spacer
+		navBlock,
+	)
+
+	content := lipgloss.JoinVertical(lipgloss.Center,
+		logo,
+		desc,
+		status,
+		lipgloss.NewStyle().Height(1).Render(""),
+		guides,
+	)
+
+	// Center vertically
+	var verticalPad string
+	if m.height > lipgloss.Height(content) {
+		lines := (m.height - lipgloss.Height(content)) / 2
+		verticalPad = strings.Repeat("\n", lines)
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Top,
+		verticalPad,
+		lipgloss.PlaceHorizontal(m.width, lipgloss.Center, content),
+	)
 }
 
 func stripAnsi(str string) string {
