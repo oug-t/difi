@@ -5,24 +5,38 @@ import (
 	"github.com/oug-t/difi/internal/config"
 )
 
-// Global UI colors and styles.
-// Initialized once at startup via InitStyles.
 var (
-	ColorBorder   lipgloss.AdaptiveColor
-	ColorFocus    lipgloss.AdaptiveColor
-	ColorText     = lipgloss.AdaptiveColor{Light: "#1F1F1F", Dark: "#F8F8F2"}
-	ColorSubtle   = lipgloss.AdaptiveColor{Light: "#A8A8A8", Dark: "#626262"}
-	ColorCursorBg = lipgloss.AdaptiveColor{Light: "#E5E5E5", Dark: "#3E3E3E"}
+	// -- Colors --
+	ColorText   = lipgloss.AdaptiveColor{Light: "#24292f", Dark: "#c9d1d9"}
+	ColorSubtle = lipgloss.AdaptiveColor{Light: "#6e7781", Dark: "#8b949e"}
+
+	// UNIFIED SELECTION COLOR (The "Neutral Light Transparent Blue")
+	// This is used for BOTH the file tree and the diff panel background.
+	// Dark: Deep subtle slate blue | Light: Pale selection blue
+	ColorVisualBg = lipgloss.AdaptiveColor{Light: "#daeaff", Dark: "#3a4b5c"}
+
+	// Tree Text Color (High Contrast for the block cursor)
+	ColorVisualFg = lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"}
+
+	ColorFolder = lipgloss.AdaptiveColor{Light: "#0969da", Dark: "#83a598"}
+	ColorFile   = lipgloss.AdaptiveColor{Light: "#24292f", Dark: "#ebdbb2"}
 
 	ColorBarBg = lipgloss.AdaptiveColor{Light: "#F2F2F2", Dark: "#1F1F1F"}
 	ColorBarFg = lipgloss.AdaptiveColor{Light: "#6E6E6E", Dark: "#9E9E9E"}
 
-	PaneStyle          lipgloss.Style
-	FocusedPaneStyle   lipgloss.Style
-	DiffStyle          lipgloss.Style
+	// -- Styles --
+	PaneStyle        lipgloss.Style
+	FocusedPaneStyle lipgloss.Style
+	DiffStyle        lipgloss.Style
+
 	ItemStyle          lipgloss.Style
-	SelectedItemStyle  lipgloss.Style
-	LineNumberStyle    lipgloss.Style
+	SelectedBlockStyle lipgloss.Style // Tree (Opaque)
+	DiffSelectionStyle lipgloss.Style // Diff (Transparent/BG only)
+
+	FolderIconStyle lipgloss.Style
+	FileIconStyle   lipgloss.Style
+	LineNumberStyle lipgloss.Style
+
 	StatusBarStyle     lipgloss.Style
 	StatusKeyStyle     lipgloss.Style
 	StatusDividerStyle lipgloss.Style
@@ -32,16 +46,20 @@ var (
 	CurrentConfig config.Config
 )
 
-// InitStyles initializes global styles based on the provided config.
-// This should be called once during application startup.
 func InitStyles(cfg config.Config) {
 	CurrentConfig = cfg
 
-	// Colors derived from user config
-	ColorBorder = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: cfg.Colors.Border}
-	ColorFocus = lipgloss.AdaptiveColor{Light: "#000000", Dark: cfg.Colors.Focus}
+	ColorBorder := lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: cfg.Colors.Border}
+	ColorFocus := lipgloss.AdaptiveColor{Light: "#6e7781", Dark: cfg.Colors.Focus}
 
-	// Pane styles
+	// Allow user override for the selection background
+	var selectionBg lipgloss.TerminalColor
+	if cfg.Colors.DiffSelectionBg != "" {
+		selectionBg = lipgloss.Color(cfg.Colors.DiffSelectionBg)
+	} else {
+		selectionBg = ColorVisualBg
+	}
+
 	PaneStyle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), false, cfg.UI.ShowGuide, false, false).
 		BorderForeground(ColorBorder)
@@ -49,44 +67,42 @@ func InitStyles(cfg config.Config) {
 	FocusedPaneStyle = PaneStyle.Copy().
 		BorderForeground(ColorFocus)
 
-	// Diff and list item styles
 	DiffStyle = lipgloss.NewStyle().Padding(0, 0)
-	ItemStyle = lipgloss.NewStyle().PaddingLeft(2)
 
-	SelectedItemStyle = lipgloss.NewStyle().
+	// Base Row
+	ItemStyle = lipgloss.NewStyle().
 		PaddingLeft(1).
-		Background(ColorCursorBg).
-		Foreground(ColorText).
-		Bold(true).
-		Width(1000)
+		PaddingRight(1).
+		Foreground(ColorText)
 
-	// Line numbers
+	// 1. LEFT PANE STYLE (Tree)
+	// Uses the shared background + forces a foreground color for readability
+	SelectedBlockStyle = lipgloss.NewStyle().
+		Background(selectionBg).
+		Foreground(ColorVisualFg).
+		PaddingLeft(1).
+		PaddingRight(1).
+		Bold(true)
+
+	// 2. RIGHT PANE STYLE (Diff)
+	// Uses the SAME shared background, but NO foreground.
+	// This makes it "transparent" so Green(+)/Red(-) text colors show through.
+	DiffSelectionStyle = lipgloss.NewStyle().
+		Background(selectionBg)
+
+	FolderIconStyle = lipgloss.NewStyle().Foreground(ColorFolder)
+	FileIconStyle = lipgloss.NewStyle().Foreground(ColorFile)
+
 	LineNumberStyle = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(cfg.Colors.LineNumber)).
 		PaddingRight(1).
 		Width(4)
 
-	// Status bar
-	StatusBarStyle = lipgloss.NewStyle().
-		Foreground(ColorBarFg).
-		Background(ColorBarBg).
-		Padding(0, 1)
+	StatusBarStyle = lipgloss.NewStyle().Foreground(ColorBarFg).Background(ColorBarBg).Padding(0, 1)
+	StatusKeyStyle = lipgloss.NewStyle().Foreground(ColorText).Background(ColorBarBg).Bold(true).Padding(0, 1)
+	StatusDividerStyle = lipgloss.NewStyle().Foreground(ColorSubtle).Background(ColorBarBg).Padding(0, 0)
 
-	StatusKeyStyle = lipgloss.NewStyle().
-		Foreground(ColorText).
-		Background(ColorBarBg).
-		Bold(true).
-		Padding(0, 1)
-
-	StatusDividerStyle = lipgloss.NewStyle().
-		Foreground(ColorSubtle).
-		Background(ColorBarBg)
-
-	// Help drawer
-	HelpTextStyle = lipgloss.NewStyle().
-		Foreground(ColorSubtle).
-		Padding(0, 1)
-
+	HelpTextStyle = lipgloss.NewStyle().Foreground(ColorSubtle).Padding(0, 1)
 	HelpDrawerStyle = lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(ColorBorder).

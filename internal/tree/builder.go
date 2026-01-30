@@ -25,10 +25,10 @@ func (i TreeItem) Title() string {
 	return fmt.Sprintf("%s%s %s", indent, icon, i.Path)
 }
 
-// Build converts a list of file paths into a compacted, sorted tree list.
+// Build converts a list of file paths into a sorted tree list.
+// Compaction is disabled to ensure tree stability.
 func Build(paths []string) []list.Item {
-	// FIX 1: Initialize root as a directory so logic works,
-	// but we won't compact the root itself.
+	// Initialize root
 	root := &node{
 		children: make(map[string]*node),
 		isDir:    true,
@@ -53,13 +53,7 @@ func Build(paths []string) []list.Item {
 		}
 	}
 
-	// FIX 2: Do NOT compact the root node itself (which would hide top-level folders).
-	// Instead, compact each top-level child individually.
-	for _, child := range root.children {
-		compact(child)
-	}
-
-	// 3. Flatten to list items
+	// 2. Flatten to list items (Sorting happens here)
 	var items []list.Item
 	flatten(root, 0, &items)
 	return items
@@ -74,41 +68,14 @@ type node struct {
 	isDir    bool
 }
 
-// compact recursively merges directories that contain only a single directory child.
-func compact(n *node) {
-	if !n.isDir {
-		return
-	}
-
-	// Compact children first (bottom-up traversal)
-	for _, child := range n.children {
-		compact(child)
-	}
-
-	// Logic: If I am a directory, and I have exactly 1 child, and that child is also a directory...
-	if len(n.children) == 1 {
-		var child *node
-		for _, c := range n.children {
-			child = c
-			break
-		}
-
-		if child.isDir {
-			// Merge child into parent
-			// e.g. "internal" + "ui" becomes "internal/ui"
-			n.name = filepath.Join(n.name, child.name)
-			n.fullPath = child.fullPath
-			n.children = child.children // Inherit grandchildren
-		}
-	}
-}
-
+// flatten recursively converts the tree into a linear list, sorting children by type and name.
 func flatten(n *node, depth int, items *[]list.Item) {
 	keys := make([]string, 0, len(n.children))
 	for k := range n.children {
 		keys = append(keys, k)
 	}
 
+	// Sort: Directories first, then alphabetical
 	sort.Slice(keys, func(i, j int) bool {
 		a, b := n.children[keys[i]], n.children[keys[j]]
 		// Folders first
@@ -123,6 +90,7 @@ func flatten(n *node, depth int, items *[]list.Item) {
 
 	for _, k := range keys {
 		child := n.children[k]
+		// Add current node
 		*items = append(*items, TreeItem{
 			Path:     child.name,
 			FullPath: child.fullPath,
@@ -130,6 +98,7 @@ func flatten(n *node, depth int, items *[]list.Item) {
 			Depth:    depth,
 		})
 
+		// Recurse if directory
 		if child.isDir {
 			flatten(child, depth+1, items)
 		}

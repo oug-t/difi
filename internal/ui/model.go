@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"io"
 	"math"
 	"strconv"
 	"strings"
@@ -28,6 +27,7 @@ const (
 
 type Model struct {
 	fileTree     list.Model
+	treeDelegate TreeDelegate
 	diffViewport viewport.Model
 
 	selectedPath  string
@@ -47,21 +47,24 @@ type Model struct {
 }
 
 func NewModel(cfg config.Config) Model {
-	// Initialize styles with the loaded config
 	InitStyles(cfg)
 
 	files, _ := git.ListChangedFiles(TargetBranch)
 	items := tree.Build(files)
 
-	l := list.New(items, listDelegate{}, 0, 0)
+	delegate := TreeDelegate{Focused: true}
+	l := list.New(items, delegate, 0, 0)
+
 	l.SetShowTitle(false)
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
+	l.SetShowPagination(false)
 	l.DisableQuitKeybindings()
 
 	m := Model{
 		fileTree:      l,
+		treeDelegate:  delegate,
 		diffViewport:  viewport.New(0, 0),
 		focus:         FocusTree,
 		currentBranch: git.GetCurrentBranch(),
@@ -132,14 +135,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.focus = FocusTree
 			}
+			m.updateTreeFocus()
 			m.inputBuffer = ""
 
 		case "l", "]", "ctrl+l", "right":
 			m.focus = FocusDiff
+			m.updateTreeFocus()
 			m.inputBuffer = ""
 
 		case "h", "[", "ctrl+h", "left":
 			m.focus = FocusTree
+			m.updateTreeFocus()
 			m.inputBuffer = ""
 
 		case "e", "enter":
@@ -243,6 +249,11 @@ func (m *Model) updateSizes() {
 	m.diffViewport.Height = contentHeight
 }
 
+func (m *Model) updateTreeFocus() {
+	m.treeDelegate.Focused = (m.focus == FocusTree)
+	m.fileTree.SetDelegate(m.treeDelegate)
+}
+
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
@@ -272,29 +283,22 @@ func (m Model) View() string {
 	for i := start; i < end; i++ {
 		line := m.diffLines[i]
 
-		// --- LINE NUMBER LOGIC ---
+		// --- LINE NUMBERS ---
 		var numStr string
 		mode := CurrentConfig.UI.LineNumbers
 
 		if mode == "hidden" {
 			numStr = ""
 		} else {
-			// Is this the cursor line?
 			isCursor := (i == m.diffCursor)
-
 			if isCursor && mode == "hybrid" {
-				// HYBRID: Show Real File Line Number
 				realLine := git.CalculateFileLine(m.diffContent, m.diffCursor)
 				numStr = fmt.Sprintf("%d", realLine)
 			} else if isCursor && mode == "relative" {
 				numStr = "0"
 			} else if mode == "absolute" {
-				// Note: Calculating absolute for every line is expensive,
-				// usually absolute view shows Diff Line Index or File Line.
-				// For simple 'absolute' view, we often show viewport index + 1
 				numStr = fmt.Sprintf("%d", i+1)
 			} else {
-				// Default / Hybrid-non-cursor: Show Relative Distance
 				dist := int(math.Abs(float64(i - m.diffCursor)))
 				numStr = fmt.Sprintf("%d", dist)
 			}
@@ -304,10 +308,12 @@ func (m Model) View() string {
 		if numStr != "" {
 			lineNumRendered = LineNumberStyle.Render(numStr)
 		}
-		// -------------------------
 
+		// --- DIFF VIEW HIGHLIGHT ---
 		if m.focus == FocusDiff && i == m.diffCursor {
-			line = SelectedItemStyle.Render(line)
+			// FIXED: Uses DiffSelectionStyle (Background only)
+			// This keeps green/red text colors visible while adding the blue selection bar
+			line = DiffSelectionStyle.Render(line)
 		} else {
 			line = "  " + line
 		}
@@ -379,23 +385,4 @@ func (m Model) View() string {
 	}
 
 	return finalView
-}
-
-// -- Delegates (unchanged) --
-type listDelegate struct{}
-
-func (d listDelegate) Height() int                               { return 1 }
-func (d listDelegate) Spacing() int                              { return 0 }
-func (d listDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
-func (d listDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	i, ok := item.(tree.TreeItem)
-	if !ok {
-		return
-	}
-	str := i.Title()
-	if index == m.Index() {
-		fmt.Fprint(w, SelectedItemStyle.Render(str))
-	} else {
-		fmt.Fprint(w, ItemStyle.Render(str))
-	}
 }
