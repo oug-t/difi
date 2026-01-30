@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -311,9 +312,8 @@ func (m Model) View() string {
 
 		// --- DIFF VIEW HIGHLIGHT ---
 		if m.focus == FocusDiff && i == m.diffCursor {
-			// FIXED: Uses DiffSelectionStyle (Background only)
-			// This keeps green/red text colors visible while adding the blue selection bar
-			line = DiffSelectionStyle.Render(line)
+			cleanLine := stripAnsi(line)
+			line = DiffSelectionStyle.Render("  " + cleanLine)
 		} else {
 			line = "  " + line
 		}
@@ -385,4 +385,9 @@ func (m Model) View() string {
 	}
 
 	return finalView
+}
+
+func stripAnsi(str string) string {
+	re := regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+	return re.ReplaceAllString(str, "")
 }
