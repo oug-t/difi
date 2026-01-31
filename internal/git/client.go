@@ -55,7 +55,7 @@ func DiffCmd(targetBranch, path string) tea.Cmd {
 	}
 }
 
-func OpenEditorCmd(path string, lineNumber int) tea.Cmd {
+func OpenEditorCmd(path string, lineNumber int, targetBranch string) tea.Cmd {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		if _, err := exec.LookPath("nvim"); err == nil {
@@ -73,6 +73,11 @@ func OpenEditorCmd(path string, lineNumber int) tea.Cmd {
 
 	c := exec.Command(editor, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+
+	// Pass the diff target branch to the editor via environment variable
+	// This enables plugins like difi.nvim to auto-configure the view
+	c.Env = append(os.Environ(), fmt.Sprintf("DIFI_TARGET=%s", targetBranch))
+
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return EditorFinishedMsg{Err: err}
 	})

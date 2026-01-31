@@ -184,7 +184,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					line = git.CalculateFileLine(m.diffContent, 0)
 				}
 				m.inputBuffer = ""
-				return m, git.OpenEditorCmd(m.selectedPath, line)
+				// Integration Point: Pass targetBranch to the editor command
+				return m, git.OpenEditorCmd(m.selectedPath, line, m.targetBranch)
 			}
 
 		// Viewport trigger
