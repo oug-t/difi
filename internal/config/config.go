@@ -10,10 +10,9 @@ type UIConfig struct {
 }
 
 func Load() Config {
-	// Default configuration
 	return Config{
 		UI: UIConfig{
-			LineNumbers: "relative", // Default to relative numbers (vim style)
+			LineNumbers: "hybrid",
 			Theme:       "default",
 		},
 	}

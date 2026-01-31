@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 )
 
-// TreeItem represents a file or folder in the UI list.
+// TreeItem represents a file or folder
 type TreeItem struct {
 	Path     string
 	FullPath string
@@ -25,16 +25,12 @@ func (i TreeItem) Title() string {
 	return fmt.Sprintf("%s%s %s", indent, icon, i.Path)
 }
 
-// Build converts a list of file paths into a sorted tree list.
-// Compaction is disabled to ensure tree stability.
 func Build(paths []string) []list.Item {
-	// Initialize root
 	root := &node{
 		children: make(map[string]*node),
 		isDir:    true,
 	}
 
-	// 1. Build the raw tree structure
 	for _, path := range paths {
 		parts := strings.Split(path, "/")
 		current := root
@@ -53,13 +49,10 @@ func Build(paths []string) []list.Item {
 		}
 	}
 
-	// 2. Flatten to list items (Sorting happens here)
 	var items []list.Item
 	flatten(root, 0, &items)
 	return items
 }
-
-// -- Helpers --
 
 type node struct {
 	name     string
@@ -75,10 +68,8 @@ func flatten(n *node, depth int, items *[]list.Item) {
 		keys = append(keys, k)
 	}
 
-	// Sort: Directories first, then alphabetical
 	sort.Slice(keys, func(i, j int) bool {
 		a, b := n.children[keys[i]], n.children[keys[j]]
-		// Folders first
 		if a.isDir && !b.isDir {
 			return true
 		}
@@ -90,7 +81,6 @@ func flatten(n *node, depth int, items *[]list.Item) {
 
 	for _, k := range keys {
 		child := n.children[k]
-		// Add current node
 		*items = append(*items, TreeItem{
 			Path:     child.name,
 			FullPath: child.fullPath,
@@ -98,7 +88,6 @@ func flatten(n *node, depth int, items *[]list.Item) {
 			Depth:    depth,
 		})
 
-		// Recurse if directory
 		if child.isDir {
 			flatten(child, depth+1, items)
 		}

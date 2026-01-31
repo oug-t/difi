@@ -6,18 +6,18 @@ import (
 )
 
 var (
-	// Global Config
+	// Config
 	CurrentConfig config.Config
 
-	// -- THEME COLORS --
+	// Theme colors
 	ColorBorder   = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
 	ColorFocus    = lipgloss.AdaptiveColor{Light: "#000000", Dark: "#E5E5E5"}
 	ColorText     = lipgloss.AdaptiveColor{Light: "#1F1F1F", Dark: "#F8F8F2"}
 	ColorSubtle   = lipgloss.AdaptiveColor{Light: "#A8A8A8", Dark: "#626262"}
 	ColorCursorBg = lipgloss.AdaptiveColor{Light: "#E5E5E5", Dark: "#3E3E3E"}
-	ColorAccent   = lipgloss.AdaptiveColor{Light: "#00ADD8", Dark: "#00ADD8"} // Go Blue
+	ColorAccent   = lipgloss.AdaptiveColor{Light: "#00ADD8", Dark: "#00ADD8"} // Go blue
 
-	// -- PANE STYLES --
+	// Pane styles
 	PaneStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), false, true, false, false).
 			BorderForeground(ColorBorder)
@@ -28,7 +28,7 @@ var (
 	DiffStyle = lipgloss.NewStyle().Padding(0, 0)
 	ItemStyle = lipgloss.NewStyle().PaddingLeft(2)
 
-	// -- LIST DELEGATE STYLES --
+	// List styles
 	SelectedItemStyle = lipgloss.NewStyle().
 				PaddingLeft(1).
 				Background(ColorCursorBg).
@@ -42,11 +42,11 @@ var (
 				Bold(true).
 				PaddingLeft(1)
 
-	// -- ICON STYLES --
+	// Icon styles
 	FolderIconStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#F7B96E", Dark: "#E5C07B"})
 	FileIconStyle   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#969696", Dark: "#ABB2BF"})
 
-	// -- DIFF VIEW STYLES --
+	// Diff view styles
 	LineNumberStyle = lipgloss.NewStyle().
 			Foreground(ColorSubtle).
 			PaddingRight(1).
@@ -56,10 +56,11 @@ var (
 				Background(ColorCursorBg).
 				Width(1000)
 
-	// -- STATUS BAR STYLES --
+	// Status bar colors
 	ColorBarBg = lipgloss.AdaptiveColor{Light: "#F2F2F2", Dark: "#1F1F1F"}
 	ColorBarFg = lipgloss.AdaptiveColor{Light: "#6E6E6E", Dark: "#9E9E9E"}
 
+	// Status bar styles
 	StatusBarStyle = lipgloss.NewStyle().
 			Foreground(ColorBarFg).
 			Background(ColorBarBg).
@@ -76,7 +77,7 @@ var (
 				Background(ColorBarBg).
 				Padding(0, 0)
 
-	// -- HELP STYLES --
+	// Help styles
 	HelpTextStyle = lipgloss.NewStyle().
 			Foreground(ColorSubtle).
 			Padding(0, 1)
@@ -86,7 +87,7 @@ var (
 			BorderForeground(ColorBorder).
 			Padding(1, 2)
 
-	// -- EMPTY STATE / LANDING PAGE STYLES --
+	// Empty/landing styles
 	EmptyLogoStyle = lipgloss.NewStyle().
 			Foreground(ColorAccent).
 			Bold(true).

@@ -39,6 +39,7 @@ type Model struct {
 	diffCursor  int
 
 	inputBuffer string
+	pendingZ    bool
 
 	focus    Focus
 	showHelp bool
@@ -72,6 +73,7 @@ func NewModel(cfg config.Config, targetBranch string) Model {
 		repoName:      git.GetRepoName(),
 		showHelp:      false,
 		inputBuffer:   "",
+		pendingZ:      false,
 	}
 
 	if len(items) > 0 {
@@ -118,8 +120,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// If list is empty, ignore other keys
 		if len(m.fileTree.Items()) == 0 {
+			return m, nil
+		}
+
+		// Handle z-prefix commands (zz, zt, zb)
+		if m.pendingZ {
+			m.pendingZ = false
+			if m.focus == FocusDiff {
+				switch msg.String() {
+				case "z", ".":
+					m.centerDiffCursor()
+				case "t":
+					m.diffViewport.SetYOffset(m.diffCursor)
+				case "b":
+					offset := m.diffCursor - m.diffViewport.Height + 1
+					if offset < 0 {
+						offset = 0
+					}
+					m.diffViewport.SetYOffset(offset)
+				}
+			}
 			return m, nil
 		}
 
@@ -166,6 +187,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, git.OpenEditorCmd(m.selectedPath, line)
 			}
 
+		// Viewport trigger
+		case "z":
+			if m.focus == FocusDiff {
+				m.pendingZ = true
+				return m, nil
+			}
+
+		// Cursor screen positioning (H, M, L)
+		case "H":
+			if m.focus == FocusDiff {
+				m.diffCursor = m.diffViewport.YOffset
+				if m.diffCursor >= len(m.diffLines) {
+					m.diffCursor = len(m.diffLines) - 1
+				}
+			}
+
+		case "M":
+			if m.focus == FocusDiff {
+				half := m.diffViewport.Height / 2
+				m.diffCursor = m.diffViewport.YOffset + half
+				if m.diffCursor >= len(m.diffLines) {
+					m.diffCursor = len(m.diffLines) - 1
+				}
+			}
+
+		case "L":
+			if m.focus == FocusDiff {
+				m.diffCursor = m.diffViewport.YOffset + m.diffViewport.Height - 1
+				if m.diffCursor >= len(m.diffLines) {
+					m.diffCursor = len(m.diffLines) - 1
+				}
+			}
+
+		// Page navigation
+		case "ctrl+d":
+			if m.focus == FocusDiff {
+				halfScreen := m.diffViewport.Height / 2
+				m.diffCursor += halfScreen
+				if m.diffCursor >= len(m.diffLines) {
+					m.diffCursor = len(m.diffLines) - 1
+				}
+				m.centerDiffCursor()
+			}
+			m.inputBuffer = ""
+
+		case "ctrl+u":
+			if m.focus == FocusDiff {
+				halfScreen := m.diffViewport.Height / 2
+				m.diffCursor -= halfScreen
+				if m.diffCursor < 0 {
+					m.diffCursor = 0
+				}
+				m.centerDiffCursor()
+			}
+			m.inputBuffer = ""
+
 		case "j", "down":
 			keyHandled = true
 			count := m.getRepeatCount()
@@ -173,6 +250,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.focus == FocusDiff {
 					if m.diffCursor < len(m.diffLines)-1 {
 						m.diffCursor++
+						// Scroll if hitting bottom edge
 						if m.diffCursor >= m.diffViewport.YOffset+m.diffViewport.Height {
 							m.diffViewport.LineDown(1)
 						}
@@ -190,6 +268,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.focus == FocusDiff {
 					if m.diffCursor > 0 {
 						m.diffCursor--
+						// Scroll if hitting top edge
 						if m.diffCursor < m.diffViewport.YOffset {
 							m.diffViewport.LineUp(1)
 						}
@@ -234,6 +313,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m *Model) centerDiffCursor() {
+	halfScreen := m.diffViewport.Height / 2
+	targetOffset := m.diffCursor - halfScreen
+	if targetOffset < 0 {
+		targetOffset = 0
+	}
+	m.diffViewport.SetYOffset(targetOffset)
+}
+
 func (m *Model) updateSizes() {
 	reservedHeight := 1
 	if m.showHelp {
@@ -265,12 +353,11 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// EMPTY STATE CHECK
 	if len(m.fileTree.Items()) == 0 {
 		return m.viewEmptyState()
 	}
 
-	// 1. PANES
+	// Panes
 	treeStyle := PaneStyle
 	if m.focus == FocusTree {
 		treeStyle = FocusedPaneStyle
@@ -335,7 +422,7 @@ func (m Model) View() string {
 
 	mainPanes := lipgloss.JoinHorizontal(lipgloss.Top, treeView, diffView)
 
-	// 2. BOTTOM AREA
+	// Bottom area
 	repoSection := StatusKeyStyle.Render(" " + m.repoName)
 	divider := StatusDividerStyle.Render("│")
 
@@ -366,12 +453,12 @@ func (m Model) View() string {
 			HelpTextStyle.Render("→/l   Right Panel"),
 		)
 		col3 := lipgloss.JoinVertical(lipgloss.Left,
-			HelpTextStyle.Render("Tab   Switch Panel"),
-			HelpTextStyle.Render("Num   Motion Count"),
+			HelpTextStyle.Render("C-d/u Page Dn/Up"),
+			HelpTextStyle.Render("zz/zt Scroll View"),
 		)
 		col4 := lipgloss.JoinVertical(lipgloss.Left,
+			HelpTextStyle.Render("H/M/L Move Cursor"),
 			HelpTextStyle.Render("e     Edit File"),
-			HelpTextStyle.Render("?     Close Help"),
 		)
 
 		helpDrawer := HelpDrawerStyle.Copy().
@@ -394,17 +481,13 @@ func (m Model) View() string {
 	return finalView
 }
 
-// viewEmptyState renders a "Landing Page" when there are no changes
 func (m Model) viewEmptyState() string {
-	// 1. Logo & Tagline
 	logo := EmptyLogoStyle.Render("difi")
 	desc := EmptyDescStyle.Render("A calm, focused way to review Git diffs.")
 
-	// 2. Status Message
 	statusMsg := fmt.Sprintf("✓ No changes found against '%s'", m.targetBranch)
 	status := EmptyStatusStyle.Render(statusMsg)
 
-	// 3. Usage Guide
 	usageHeader := EmptyHeaderStyle.Render("Usage Patterns")
 
 	cmd1 := lipgloss.NewStyle().Foreground(ColorText).Render("difi")
@@ -423,7 +506,6 @@ func (m Model) viewEmptyState() string {
 		lipgloss.JoinHorizontal(lipgloss.Left, cmd3, desc3),
 	)
 
-	// 4. Navigation Guide
 	navHeader := EmptyHeaderStyle.Render("Navigation")
 
 	key1 := lipgloss.NewStyle().Foreground(ColorText).Render("Tab")
@@ -432,8 +514,8 @@ func (m Model) viewEmptyState() string {
 	key2 := lipgloss.NewStyle().Foreground(ColorText).Render("j / k")
 	keyDesc2 := EmptyCodeStyle.Render("Move cursor")
 
-	key3 := lipgloss.NewStyle().Foreground(ColorText).Render("?")
-	keyDesc3 := EmptyCodeStyle.Render("Toggle help")
+	key3 := lipgloss.NewStyle().Foreground(ColorText).Render("zz/zt")
+	keyDesc3 := EmptyCodeStyle.Render("Center/Top")
 
 	navBlock := lipgloss.JoinVertical(lipgloss.Left,
 		navHeader,
@@ -442,10 +524,9 @@ func (m Model) viewEmptyState() string {
 		lipgloss.JoinHorizontal(lipgloss.Left, key3, keyDesc3),
 	)
 
-	// Combine blocks
 	guides := lipgloss.JoinHorizontal(lipgloss.Top,
 		usageBlock,
-		lipgloss.NewStyle().Width(8).Render(""), // Spacer
+		lipgloss.NewStyle().Width(8).Render(""),
 		navBlock,
 	)
 
@@ -457,7 +538,6 @@ func (m Model) viewEmptyState() string {
 		guides,
 	)
 
-	// Center vertically
 	var verticalPad string
 	if m.height > lipgloss.Height(content) {
 		lines := (m.height - lipgloss.Height(content)) / 2
