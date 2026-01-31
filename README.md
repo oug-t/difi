@@ -6,8 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>A calm, focused way to review Git diffs.</strong><br />
-  Review code with clarity. Polish before you push.
+  <strong>A calm, focused way to review Git diffs.</strong>
 </p>
 
 <p align="center">
@@ -16,10 +15,15 @@
 
 ## Why difi?
 
-- ⚡️ **Blazing Fast** — Built in Go. Starts instantly.
-- 🎨 **Semantic UI** — Split-pane layout with syntax highlighting and Nerd Font icons.
-- 🧠 **Context Aware** — Opens your editor (nvim/vim) at the exact line you are reviewing.
-- ⌨️ **Vim Native** — Navigate with `h j k l`. Zero mouse required.
+- ⚡️ **Instant startup** — Built in Go, no background daemon.
+- 🎨 **Structured review** — Tree view + side-by-side diffs.
+- 🧠 **Editor-aware** — Jump to the exact line in `nvim` / `vim`.
+- ⌨️ **Keyboard-first** — Designed for `h j k l`, no mouse.
+
+## Why not `git diff`?
+
+- `git diff` is powerful, but it’s optimized for output — not review.
+- difi is designed for the *moment before you push or open a PR*:
 
 ## Installation
 
@@ -30,8 +34,6 @@ brew tap oug-t/difi
 brew install difi
 ```
 
-## Installation
-
 ### Go Install
 
 ```bash
@@ -40,7 +42,7 @@ go install github.com/oug-t/difi/cmd/difi@latest
 
 ### Manual (Linux / Windows)
 
-- Download the binary from Releases and add it to your $PATH.
+- Download the binary from Releases and add it to your `$PATH`.
 
 ## Workflow
 
@@ -62,11 +64,9 @@ difi
 | `e` / `Enter` | Edit file (opens editor at selected line)    |
 | `?`           | Toggle help drawer                           |
 | `q`           | Quit                                         |
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contributing
-
-- PRs are welcome!
-- We use Bubble Tea for the TUI.
 
 ```bash
 git clone https://github.com/oug-t/difi
@@ -74,6 +74,24 @@ cd difi
 go run cmd/difi/main.go
 ```
 
+Contributions are especially welcome in:
+- diff rendering edge cases
+- UI polish and accessibility
+- Windows support
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Star History
+
+<a href="https://star-history.com/#oug-t/difi&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=oug-t/difi&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=oug-t/difi&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=oug-t/difi&type=Date" />
+ </picture>
+</a>
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
+
