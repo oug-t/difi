@@ -1,4 +1,6 @@
-<h1 align="center">difi</h1>
+<h1 align="center"><code>difi</code></h1>
+<p align="center"><em>Review and refine Git diffs before you push</em></p>
+
 <p align="center">
   <img src="https://img.shields.io/badge/Go-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/Bubble_Tea-E2386F?style=for-the-badge&logo=tea&logoColor=white" />
@@ -9,9 +11,7 @@
   <strong>A calm, focused way to review Git diffs.</strong>
 </p>
 
-<p align="center">
-  <img src="https://via.placeholder.com/800x450.png?text=Showcase+Your+UI+Here" alt="difi demo" width="100%" />
-</p>
+<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/fbea297a-b99d-4e98-b369-2925a7651a13" />
 
 ## Why difi?
 
@@ -94,4 +94,5 @@ Contributions are especially welcome in:
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
+
 
