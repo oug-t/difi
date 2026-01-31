@@ -12,8 +12,8 @@ var (
 	// Theme colors
 	ColorBorder   = lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
 	ColorFocus    = lipgloss.AdaptiveColor{Light: "#000000", Dark: "#E5E5E5"}
-	ColorText     = lipgloss.AdaptiveColor{Light: "#1F1F1F", Dark: "#F8F8F2"}
-	ColorSubtle   = lipgloss.AdaptiveColor{Light: "#A8A8A8", Dark: "#626262"}
+	ColorText     = lipgloss.AdaptiveColor{Light: "#1F1F1F", Dark: "#FFFFFF"}
+	ColorSubtle   = lipgloss.AdaptiveColor{Light: "#A8A8A8", Dark: "#D0D0D0"}
 	ColorCursorBg = lipgloss.AdaptiveColor{Light: "#E5E5E5", Dark: "#3E3E3E"}
 	ColorAccent   = lipgloss.AdaptiveColor{Light: "#00ADD8", Dark: "#00ADD8"} // Go blue
 
