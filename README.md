@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/github/license/oug-t/difi?style=for-the-badge&color=2e3440" />
 </p>
 
-<img width="2560" height="1440" alt="image" src="https://github.com/user-attachments/assets/fbea297a-b99d-4e98-b369-2925a7651a13" />
+<img width="1024" height="576" alt="image" src="https://github.com/user-attachments/assets/ae68aebd-46ed-49d3-90c1-ec0ba7a727d5" />
 
 ## Why difi?
 
@@ -92,6 +92,7 @@ Contributions are especially welcome in:
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
+
 
 
 
