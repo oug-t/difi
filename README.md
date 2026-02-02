@@ -8,38 +8,41 @@
   <img src="https://img.shields.io/github/license/oug-t/difi?style=for-the-badge&color=2e3440" />
 </p>
 
-<img width="1024" height="576" alt="image" src="https://github.com/user-attachments/assets/ae68aebd-46ed-49d3-90c1-ec0ba7a727d5" />
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/70c177cb-9ad8-4e53-8837-f5e7b3f22fa0" alt="difi" />
+</p>
 
 ## Why difi?
 
-- ⚡️ **Instant startup** — Built in Go, no background daemon.
-- 🎨 **Structured review** — Tree view + side-by-side diffs.
-- 🧠 **Editor-aware** — Jump to the exact line in `nvim` / `vim`.
-- ⌨️ **Keyboard-first** — Designed for `h j k l`, no mouse.
+**git diff** shows changes. **difi** helps you *review* them.
 
-## Why not `git diff`?
+- ⚡️ **Instant** — Built in Go. Launches immediately with no daemon or indexing.
+- 🎨 **Structured** — A clean file tree and focused diffs for fast mental parsing.
+- 🧠 **Editor-Aware** — Jump straight to the exact line in `nvim`/`vim` to fix issues.
+- ⌨️ **Keyboard-First** — Navigate everything with `h j k l`. No mouse required.
 
-- `git diff` is powerful, but it’s optimized for output — not review.
-- difi is designed for the *moment before you push or open a PR*:
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Installation
 
-### Homebrew (macOS & Linux)
+#### Homebrew (macOS & Linux)
 
 ```bash
 brew tap oug-t/difi
 brew install difi
 ```
 
-### Go Install
+#### Go Install
 
 ```bash
 go install github.com/oug-t/difi/cmd/difi@latest
 ```
 
-### Manual (Linux / Windows)
+#### Manual (Linux / Windows)
 
 - Download the binary from Releases and add it to your `$PATH`.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Workflow
 
@@ -51,6 +54,8 @@ cd my-project
 difi
 ```
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## Controls
 
 | Key           | Action                                       |
@@ -61,7 +66,25 @@ difi
 | `e` / `Enter` | Edit file (opens editor at selected line)    |
 | `?`           | Toggle help drawer                           |
 | `q`           | Quit                                         |
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Integrations
+
+#### Neovim
+
+Get the ultimate review experience with **[difi.nvim](https://github.com/oug-t/difi.nvim)**.
+
+- **Auto-Open:** Instantly jumps to the file and line when you press `e` in the CLI.
+- **Visual Diff:** Renders diffs inline with familiar green/red highlights—just like reviewing a PR on GitHub.
+- **Interactive Review:** Restore a "deleted" line by simply removing the `-` marker. Discard an added line by deleting it entirely.
+- **Context Aware:** Automatically syncs with your `difi` session target.
+
+<p align="left">
+  <a href="https://github.com/oug-t/difi.nvim">
+    <img src="https://img.shields.io/badge/Get_difi.nvim-57A143?style=for-the-badge&logo=neovim&logoColor=white" alt="Get difi.nvim" />
+  </a>
+</p>
 
 ## Contributing
 
@@ -72,9 +95,10 @@ go run cmd/difi/main.go
 ```
 
 Contributions are especially welcome in:
-- diff rendering edge cases
+- diff.nvim rendering edge cases
 - UI polish and accessibility
 - Windows support
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Star History
@@ -87,11 +111,13 @@ Contributions are especially welcome in:
     </picture>
   </a>
 </div>
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
+
 
 
 
