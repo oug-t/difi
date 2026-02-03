@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/70c177cb-9ad8-4e53-8837-f5e7b3f22fa0" alt="difi" />
+  <img src= "https://github.com/user-attachments/assets/2cecb580-fe35-47ae-886b-8315226d122b" alt="difi_demo" />
 </p>
 
 ## Why difi?
@@ -117,6 +117,7 @@ Contributions are especially welcome in:
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
+
 
 
 
