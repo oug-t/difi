@@ -38,6 +38,18 @@ brew install difi
 go install github.com/oug-t/difi/cmd/difi@latest
 ```
 
+#### AUR (Arch Linux)
+
+**Binary (pre-built):**
+```bash
+pikaur -S difi-bin
+```
+
+**Build from source:**
+```bash
+pikaur -S difi
+```
+
 #### Manual (Linux / Windows)
 
 - Download the binary from Releases and add it to your `$PATH`.
