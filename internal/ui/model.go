@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/oug-t/difi/internal/config"
 	"github.com/oug-t/difi/internal/git"
@@ -402,7 +403,7 @@ func (m *Model) updateSizes() {
 	}
 	m.fileList.SetSize(treeWidth, listHeight)
 
-	m.diffViewport.Width = m.width - treeWidth - 2
+	m.diffViewport.Width = m.width - treeWidth - 4 // border (2) + padding (2) from tree pane
 	m.diffViewport.Height = listHeight
 }
 
@@ -455,8 +456,14 @@ func (m Model) View() string {
 				end = len(m.diffLines)
 			}
 
+			// 5 for line number (Width 4 + MarginRight 1), 2 for indent
+			maxLineWidth := m.diffViewport.Width - 7
+			if maxLineWidth < 1 {
+				maxLineWidth = 1
+			}
+
 			for i := start; i < end; i++ {
-				line := m.diffLines[i]
+				line := ansi.Truncate(m.diffLines[i], maxLineWidth, "")
 
 				var numStr string
 				mode := "relative"
