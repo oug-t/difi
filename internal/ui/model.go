@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"math"
+	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -224,13 +226,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if m.selectedPath != "" {
-				if i, ok := m.fileList.SelectedItem().(tree.TreeItem); ok && !i.IsDir {
-					// proceed
+				line := 0
+				if m.focus == FocusDiff {
+					line = git.CalculateFileLine(m.diffContent, m.diffCursor)
 				} else {
-					return m, nil
+					line = git.CalculateFileLine(m.diffContent, 0)
 				}
+				return m, openFugitive(m.selectedPath, line)
 			}
-			fallthrough
 
 		case "e":
 			if m.selectedPath != "" {
@@ -245,7 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					line = git.CalculateFileLine(m.diffContent, 0)
 				}
 				m.inputBuffer = ""
-				return m, git.OpenEditorCmd(m.selectedPath, line, m.targetBranch)
+				return m, openFugitive(m.selectedPath, line)
 			}
 
 		case "z":
@@ -367,6 +370,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func openFugitive(path string, line int) tea.Cmd {
+	lineArg := fmt.Sprintf("+%d", line)
+	c := exec.Command("nvim", lineArg, "-c", "Gvdiffsplit!", path)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return git.EditorFinishedMsg{}
+	})
 }
 
 func (m *Model) centerDiffCursor() {
@@ -571,7 +585,7 @@ func (m Model) renderHelpDrawer() string {
 	)
 	col4 := lipgloss.JoinVertical(lipgloss.Left,
 		HelpTextStyle.Render("H/M/L Move Cursor"),
-		HelpTextStyle.Render("e     Edit File"),
+		HelpTextStyle.Render("e      Edit File"),
 	)
 
 	return HelpDrawerStyle.Copy().
@@ -654,8 +668,6 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 		guides,
 	)
 
-	// Use lipgloss.Place to center the content in the available space
-	// This automatically handles vertical and horizontal centering.
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, content)
 }
 

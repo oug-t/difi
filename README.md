@@ -1,4 +1,5 @@
 <a id="readme-top"></a>
+
 <h1 align="center"><code>difi</code></h1>
 <p align="center"><em>Review and refine Git diffs before you push</em></p>
 
@@ -14,7 +15,7 @@
 
 ## Why difi?
 
-**git diff** shows changes. **difi** helps you *review* them.
+**git diff** shows changes. **difi** helps you _review_ them.
 
 - ⚡️ **Instant** — Built in Go. Launches immediately with no daemon or indexing.
 - 🎨 **Structured** — A clean file tree and focused diffs for fast mental parsing.
@@ -71,7 +72,25 @@ difi
 
 ## Integrations
 
-#### Neovim
+#### vim-fugitive
+
+- **The "Unix philosophy" approach:** Uses the industry-standard Git wrapper to provide a robust, side-by-side editing experience.
+- **Side-by-Side Editing:** Instantly opens a vertical split (:Gvdiffsplit!) against the index.
+- **Merge Conflicts:** Automatically detects conflicts and opens a 3-way merge view for resolution.
+- **Config**: Add the line below to if using **lazy.nvim**.
+
+```lua
+{
+  "tpope/vim-fugitive",
+  cmd = { "Gvdiffsplit", "Git" }, -- Add this line
+}
+```
+
+<p align="left"> 
+    <img src="https://img.shields.io/badge/Supports-vim--fugitive-4d4d4d?style=for-the-badge&logo=vim&logoColor=white" alt="Supports vim-fugitive" />
+</p>
+
+#### difi.nvim
 
 Get the ultimate review experience with **[difi.nvim](https://github.com/oug-t/difi.nvim)**.
 
@@ -86,6 +105,8 @@ Get the ultimate review experience with **[difi.nvim](https://github.com/oug-t/d
   </a>
 </p>
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## Contributing
 
 ```bash
@@ -95,6 +116,7 @@ go run cmd/difi/main.go
 ```
 
 Contributions are especially welcome in:
+
 - diff.nvim rendering edge cases
 - UI polish and accessibility
 - Windows support
@@ -117,11 +139,3 @@ Contributions are especially welcome in:
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
-
-
-
-
-
-
-
-
