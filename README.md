@@ -101,7 +101,9 @@ difi
 ```
 
 <p align="left"> 
+  <a href="https://github.com/tpope/vim-fugitive.git">
     <img src="https://img.shields.io/badge/Supports-vim--fugitive-4d4d4d?style=for-the-badge&logo=vim&logoColor=white" alt="Supports vim-fugitive" />
+  </a>
 </p>
 
 #### difi.nvim
@@ -169,3 +171,4 @@ Contributions are especially welcome in:
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
+
