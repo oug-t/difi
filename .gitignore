@@ -1,0 +1,14 @@
+# build artifacts
+/dist/
+/bin/
+/coverage/
+
+# Go test binaries and coverage
+*.test
+*.out
+
+# logs
+*.log
+
+# OS
+.DS_Store
