@@ -46,6 +46,9 @@ type Model struct {
 	statsAdded   int
 	statsDeleted int
 
+	currentFileAdded   int
+	currentFileDeleted int
+
 	diffContent string
 	diffLines   []string
 	diffCursor  int
@@ -362,9 +365,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case git.DiffMsg:
-		m.diffContent = msg.Content
-		m.diffLines = strings.Split(msg.Content, "\n")
-		m.diffViewport.SetContent(msg.Content)
+		fullLines := strings.Split(msg.Content, "\n")
+
+		var cleanLines []string
+		var added, deleted int
+		foundHunk := false
+
+		for _, line := range fullLines {
+			cleanLine := stripAnsi(line)
+
+			if strings.HasPrefix(cleanLine, "@@") {
+				foundHunk = true
+			}
+
+			if !foundHunk {
+				continue
+			}
+
+			cleanLines = append(cleanLines, line)
+
+			// Check "+++" to avoid counting file header
+			if strings.HasPrefix(cleanLine, "+") && !strings.HasPrefix(cleanLine, "+++") {
+				added++
+			} else if strings.HasPrefix(cleanLine, "-") && !strings.HasPrefix(cleanLine, "---") {
+				deleted++
+			}
+		}
+
+		m.diffLines = cleanLines
+		m.currentFileAdded = added
+		m.currentFileDeleted = deleted
+
+		newContent := strings.Join(cleanLines, "\n")
+		m.diffContent = newContent
+		m.diffViewport.SetContent(newContent)
+		m.diffViewport.GotoTop()
 
 	case git.EditorFinishedMsg:
 		return m, git.DiffCmd(m.targetBranch, m.selectedPath)
@@ -448,8 +483,6 @@ func (m Model) View() string {
 		treeStyle := PaneStyle
 		if m.focus == FocusTree {
 			treeStyle = FocusedPaneStyle
-		} else {
-			treeStyle = PaneStyle
 		}
 
 		treeView := treeStyle.Copy().
@@ -458,33 +491,84 @@ func (m Model) View() string {
 			Render(m.fileList.View())
 
 		var rightPaneView string
-
 		selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem)
+
 		if ok && selectedItem.IsDir {
 			rightPaneView = m.renderEmptyState(m.diffViewport.Width, m.diffViewport.Height, "Directory: "+selectedItem.Name)
 		} else {
 			var renderedDiff strings.Builder
+
+			// Reserve 1 line for the file header
+			viewportHeight := m.diffViewport.Height - 1
 			start := m.diffViewport.YOffset
-			end := start + m.diffViewport.Height
+			end := start + viewportHeight
 			if end > len(m.diffLines) {
 				end = len(m.diffLines)
 			}
 
-			// 5 for line number (Width 4 + MarginRight 1), 2 for indent
+			// Calculate stats
+			added, deleted := 0, 0
+			for _, line := range m.diffLines {
+				clean := stripAnsi(line)
+				if strings.HasPrefix(clean, "+") && !strings.HasPrefix(clean, "+++") {
+					added++
+				} else if strings.HasPrefix(clean, "-") && !strings.HasPrefix(clean, "---") {
+					deleted++
+				}
+			}
+
+			headerStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("240")).
+				Border(lipgloss.NormalBorder(), false, false, true, false).
+				BorderForeground(lipgloss.Color("236")).
+				Width(m.diffViewport.Width).
+				Padding(0, 1)
+
+			headerText := fmt.Sprintf("%s  (+%d / -%d)", m.selectedPath, added, deleted)
+			header := headerStyle.Render(headerText)
+
 			maxLineWidth := m.diffViewport.Width - 7
 			if maxLineWidth < 1 {
 				maxLineWidth = 1
 			}
 
 			for i := start; i < end; i++ {
-				line := ansi.Truncate(m.diffLines[i], maxLineWidth, "")
+				rawLine := m.diffLines[i]
+				cleanLine := stripAnsi(rawLine)
+				line := ansi.Truncate(rawLine, maxLineWidth, "")
+
+				// Skip Git metadata noise
+				if strings.HasPrefix(cleanLine, "diff --git") ||
+					strings.HasPrefix(cleanLine, "index ") ||
+					strings.HasPrefix(cleanLine, "new file mode") ||
+					strings.HasPrefix(cleanLine, "old mode") ||
+					strings.HasPrefix(cleanLine, "--- /dev/") ||
+					strings.HasPrefix(cleanLine, "+++ b/") {
+					continue
+				}
+
+				// Handle Hunk Headers
+				if strings.HasPrefix(cleanLine, "@@") {
+					content := cleanLine
+					if idx := strings.LastIndex(content, "@@"); idx != -1 {
+						content = content[idx+2:]
+					}
+					content = strings.TrimSpace(content)
+
+					if content == "" {
+						content = "..."
+					}
+
+					divider := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("  › " + content)
+
+					renderedDiff.WriteString("     " + divider + "\n")
+					continue
+				}
 
 				var numStr string
 				mode := "relative"
 
-				if mode == "hidden" {
-					numStr = ""
-				} else {
+				if mode != "hidden" {
 					isCursor := (i == m.diffCursor)
 					if isCursor && mode == "hybrid" {
 						realLine := git.CalculateFileLine(m.diffContent, m.diffCursor)
@@ -505,7 +589,6 @@ func (m Model) View() string {
 				}
 
 				if m.focus == FocusDiff && i == m.diffCursor {
-					cleanLine := stripAnsi(line)
 					line = DiffSelectionStyle.Render("  " + cleanLine)
 				} else {
 					line = "  " + line
@@ -516,10 +599,12 @@ func (m Model) View() string {
 
 			diffContentStr := strings.TrimRight(renderedDiff.String(), "\n")
 
-			rightPaneView = DiffStyle.Copy().
+			diffView := DiffStyle.Copy().
 				Width(m.diffViewport.Width).
-				Height(m.diffViewport.Height).
+				Height(viewportHeight).
 				Render(diffContentStr)
+
+			rightPaneView = lipgloss.JoinVertical(lipgloss.Top, header, diffView)
 		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
@@ -592,7 +677,7 @@ func (m Model) renderHelpDrawer() string {
 	)
 	col4 := lipgloss.JoinVertical(lipgloss.Left,
 		HelpTextStyle.Render("H/M/L Move Cursor"),
-		HelpTextStyle.Render("e      Edit File"),
+		HelpTextStyle.Render("e     Edit File"),
 	)
 
 	return HelpDrawerStyle.Copy().
