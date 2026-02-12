@@ -498,8 +498,8 @@ func (m Model) View() string {
 		} else {
 			var renderedDiff strings.Builder
 
-			// Reserve 1 line for the file header
-			viewportHeight := m.diffViewport.Height - 1
+			// Reserve 2 line for the file header
+			viewportHeight := m.diffViewport.Height - 2
 			start := m.diffViewport.YOffset
 			end := start + viewportHeight
 			if end > len(m.diffLines) {
