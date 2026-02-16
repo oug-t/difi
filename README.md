@@ -60,12 +60,26 @@ pikaur -S difi
 
 ## Workflow
 
-- Run difi in any Git repository.
-- By default, it compares your current branch against main.
+- Run difi in any Git repository against main:
 
 ```bash
 cd my-project
 difi
+```
+
+**Piping & Alternative VCS**
+
+- You can also pass raw diffs directly into `difi` via standard input. This is perfect for patch files or other version control systems like Jujutsu:
+
+```bash
+# Review a saved patch file
+cat changes.patch | difi
+
+# Review changes in Jujutsu (jj)
+jj diff --git | difi
+
+# Pipe standard git diff output
+git diff | difi
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

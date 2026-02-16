@@ -60,12 +60,19 @@ type Model struct {
 	showHelp bool
 
 	width, height int
+
+	pipedDiff string
 }
 
-func NewModel(cfg config.Config, targetBranch string) Model {
+func NewModel(cfg config.Config, targetBranch string, pipedDiff string) Model {
 	InitStyles(cfg)
 
-	files, _ := git.ListChangedFiles(targetBranch)
+	var files []string
+	if pipedDiff != "" {
+		files = git.ParseFilesFromDiff(pipedDiff)
+	} else {
+		files, _ = git.ListChangedFiles(targetBranch)
+	}
 
 	t := tree.New(files)
 	items := t.Items()
@@ -92,6 +99,7 @@ func NewModel(cfg config.Config, targetBranch string) Model {
 		showHelp:      false,
 		inputBuffer:   "",
 		pendingZ:      false,
+		pipedDiff:     pipedDiff,
 	}
 
 	if len(items) > 0 {
@@ -108,10 +116,18 @@ func (m Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
 	if m.selectedPath != "" {
-		cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
+		if m.pipedDiff != "" {
+			cmds = append(cmds, func() tea.Msg {
+				return git.DiffMsg{Content: git.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+			})
+		} else {
+			cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
+		}
 	}
 
-	cmds = append(cmds, fetchStatsCmd(m.targetBranch))
+	if m.pipedDiff == "" {
+		cmds = append(cmds, fetchStatsCmd(m.targetBranch))
+	}
 
 	return tea.Batch(cmds...)
 }
@@ -358,7 +374,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedPath = item.FullPath
 				m.diffCursor = 0
 				m.diffViewport.GotoTop()
-				cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
+				if m.pipedDiff != "" {
+					cmds = append(cmds, func() tea.Msg {
+						return git.DiffMsg{Content: git.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+					})
+				} else {
+					cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
+				}
 			}
 		}
 	}
@@ -384,7 +406,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			cleanLines = append(cleanLines, line)
 
-			// Check "+++" to avoid counting file header
 			if strings.HasPrefix(cleanLine, "+") && !strings.HasPrefix(cleanLine, "+++") {
 				added++
 			} else if strings.HasPrefix(cleanLine, "-") && !strings.HasPrefix(cleanLine, "---") {
@@ -402,6 +423,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffViewport.GotoTop()
 
 	case git.EditorFinishedMsg:
+		if m.pipedDiff != "" {
+			return m, func() tea.Msg {
+				return git.DiffMsg{Content: git.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+			}
+		}
 		return m, git.DiffCmd(m.targetBranch, m.selectedPath)
 	}
 
@@ -429,7 +455,6 @@ func (m *Model) centerDiffCursor() {
 }
 
 func (m *Model) updateSizes() {
-	// 1 line Top Bar + 1 line Bottom Bar = 2 reserved
 	reservedHeight := 2
 	if m.showHelp {
 		reservedHeight += 6
@@ -445,14 +470,13 @@ func (m *Model) updateSizes() {
 		treeWidth = 20
 	}
 
-	// Subtract border height (2) from contentHeight
 	listHeight := contentHeight - 2
 	if listHeight < 1 {
 		listHeight = 1
 	}
 	m.fileList.SetSize(treeWidth, listHeight)
 
-	m.diffViewport.Width = m.width - treeWidth - 4 // border (2) + padding (2) from tree pane
+	m.diffViewport.Width = m.width - treeWidth - 4
 	m.diffViewport.Height = listHeight
 }
 
@@ -506,7 +530,6 @@ func (m Model) View() string {
 				end = len(m.diffLines)
 			}
 
-			// Calculate stats
 			added, deleted := 0, 0
 			for _, line := range m.diffLines {
 				clean := stripAnsi(line)
@@ -537,7 +560,6 @@ func (m Model) View() string {
 				cleanLine := stripAnsi(rawLine)
 				line := ansi.Truncate(rawLine, maxLineWidth, "")
 
-				// Skip Git metadata noise
 				if strings.HasPrefix(cleanLine, "diff --git") ||
 					strings.HasPrefix(cleanLine, "index ") ||
 					strings.HasPrefix(cleanLine, "new file mode") ||
@@ -547,7 +569,6 @@ func (m Model) View() string {
 					continue
 				}
 
-				// Handle Hunk Headers
 				if strings.HasPrefix(cleanLine, "@@") {
 					content := cleanLine
 					if idx := strings.LastIndex(content, "@@"); idx != -1 {

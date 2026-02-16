@@ -153,3 +153,43 @@ func stripAnsi(str string) string {
 
 type DiffMsg struct{ Content string }
 type EditorFinishedMsg struct{ Err error }
+
+func ParseFilesFromDiff(diffText string) []string {
+	var files []string
+	seen := make(map[string]bool)
+	lines := strings.Split(diffText, "\n")
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git a/") {
+			parts := strings.SplitN(line, " b/", 2)
+			if len(parts) == 2 {
+				file := strings.TrimPrefix(parts[0], "diff --git a/")
+				if !seen[file] {
+					seen[file] = true
+					files = append(files, file)
+				}
+			}
+		}
+	}
+	return files
+}
+
+func ExtractFileDiff(diffText, targetPath string) string {
+	lines := strings.Split(diffText, "\n")
+	var out []string
+	inTarget := false
+
+	targetHeader := fmt.Sprintf("diff --git a/%s b/%s", targetPath, targetPath)
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			inTarget = strings.HasPrefix(line, targetHeader)
+		}
+
+		if inTarget {
+			out = append(out, line)
+		}
+	}
+
+	return strings.Join(out, "\n")
+}
