@@ -29,7 +29,6 @@
 #### Homebrew (macOS & Linux)
 
 ```bash
-brew tap oug-t/difi
 brew install difi
 ```
 
@@ -171,5 +170,3 @@ Contributions are especially welcome in:
 ---
 
 <p align="center"> Made with ❤️ by <a href="https://github.com/oug-t">oug-t</a> </p>
-
-
