@@ -3,8 +3,6 @@ package ui
 import (
 	"fmt"
 	"math"
-	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,8 +14,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/oug-t/difi/internal/config"
-	"github.com/oug-t/difi/internal/git"
 	"github.com/oug-t/difi/internal/tree"
+	"github.com/oug-t/difi/internal/vcs"
 )
 
 type Focus int
@@ -27,9 +25,13 @@ const (
 	FocusDiff
 )
 
+// ansiRe matches ANSI escape sequences for stripping from terminal output.
+var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+
 type StatsMsg struct {
 	Added   int
 	Deleted int
+	ByFile  map[string][2]int
 }
 
 type Model struct {
@@ -49,6 +51,8 @@ type Model struct {
 	currentFileAdded   int
 	currentFileDeleted int
 
+	fileStats map[string][2]int // per-file [added, deleted]
+
 	diffContent string
 	diffLines   []string
 	diffCursor  int
@@ -62,18 +66,18 @@ type Model struct {
 	width, height int
 
 	pipedDiff string
+	vcs       vcs.VCS
 }
 
-func NewModel(cfg config.Config, targetBranch string, pipedDiff string) Model {
+func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClient vcs.VCS) Model {
 	InitStyles(cfg)
 
 	var files []string
 	if pipedDiff != "" {
-		files = git.ParseFilesFromDiff(pipedDiff)
+		files = vcsClient.ParseFilesFromDiff(pipedDiff)
 	} else {
-		files, _ = git.ListChangedFiles(targetBranch)
+		files, _ = vcsClient.ListChangedFiles(targetBranch)
 	}
-
 	t := tree.New(files)
 	items := t.Items()
 
@@ -93,20 +97,22 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string) Model {
 		treeDelegate:  delegate,
 		diffViewport:  viewport.New(0, 0),
 		focus:         FocusTree,
-		currentBranch: git.GetCurrentBranch(),
+		currentBranch: vcsClient.GetCurrentBranch(),
 		targetBranch:  targetBranch,
-		repoName:      git.GetRepoName(),
+		repoName:      vcsClient.GetRepoName(),
 		showHelp:      false,
 		inputBuffer:   "",
 		pendingZ:      false,
 		pipedDiff:     pipedDiff,
+		vcs:           vcsClient,
 	}
 
-	if len(items) > 0 {
-		if first, ok := items[0].(tree.TreeItem); ok {
-			if !first.IsDir {
-				m.selectedPath = first.FullPath
-			}
+	// Find the first file (not directory) to select initially
+	for idx, item := range items {
+		if ti, ok := item.(tree.TreeItem); ok && !ti.IsDir {
+			m.selectedPath = ti.FullPath
+			m.fileList.Select(idx)
+			break
 		}
 	}
 	return m
@@ -118,27 +124,69 @@ func (m Model) Init() tea.Cmd {
 	if m.selectedPath != "" {
 		if m.pipedDiff != "" {
 			cmds = append(cmds, func() tea.Msg {
-				return git.DiffMsg{Content: git.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+				return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
 			})
 		} else {
-			cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
+			cmds = append(cmds, m.vcs.DiffCmd(m.targetBranch, m.selectedPath))
 		}
 	}
 
 	if m.pipedDiff == "" {
-		cmds = append(cmds, fetchStatsCmd(m.targetBranch))
+		cmds = append(cmds, m.fetchStatsCmd(m.targetBranch))
+	} else {
+		cmds = append(cmds, m.computePipedStatsCmd())
 	}
 
 	return tea.Batch(cmds...)
 }
 
-func fetchStatsCmd(target string) tea.Cmd {
+func (m Model) fetchStatsCmd(target string) tea.Cmd {
 	return func() tea.Msg {
-		added, deleted, err := git.DiffStats(target)
+		added, deleted, err := m.vcs.DiffStats(target)
 		if err != nil {
 			return nil
 		}
-		return StatsMsg{Added: added, Deleted: deleted}
+		byFile, _ := m.vcs.DiffStatsByFile(target)
+		return StatsMsg{Added: added, Deleted: deleted, ByFile: byFile}
+	}
+}
+
+func (m Model) computePipedStatsCmd() tea.Cmd {
+	return func() tea.Msg {
+		byFile := make(map[string][2]int)
+		var totalAdded, totalDeleted int
+		var currentFile string
+
+		for _, line := range strings.Split(m.pipedDiff, "\n") {
+			clean := stripAnsi(line)
+			if strings.HasPrefix(clean, "diff --git ") {
+				// git format: "diff --git a/path b/path"
+				parts := strings.Fields(clean)
+				if len(parts) >= 4 {
+					currentFile = strings.TrimPrefix(parts[3], "b/")
+				}
+			} else if strings.HasPrefix(clean, "diff -r ") {
+				// hg format: "diff -r <rev> <file>" or "diff -r <rev1> -r <rev2> <file>"
+				// The file path is always the last whitespace-separated field.
+				parts := strings.Fields(clean)
+				if len(parts) >= 3 {
+					currentFile = parts[len(parts)-1]
+				}
+			} else if currentFile != "" {
+				if strings.HasPrefix(clean, "+") && !strings.HasPrefix(clean, "+++") {
+					s := byFile[currentFile]
+					s[0]++
+					byFile[currentFile] = s
+					totalAdded++
+				} else if strings.HasPrefix(clean, "-") && !strings.HasPrefix(clean, "---") {
+					s := byFile[currentFile]
+					s[1]++
+					byFile[currentFile] = s
+					totalDeleted++
+				}
+			}
+		}
+		return StatsMsg{Added: totalAdded, Deleted: totalDeleted, ByFile: byFile}
 	}
 }
 
@@ -169,6 +217,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StatsMsg:
 		m.statsAdded = msg.Added
 		m.statsDeleted = msg.Deleted
+		if msg.ByFile != nil {
+			m.fileStats = msg.ByFile
+		}
 
 	case tea.KeyMsg:
 		if msg.String() == "q" || msg.String() == "ctrl+c" {
@@ -248,11 +299,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedPath != "" {
 				line := 0
 				if m.focus == FocusDiff {
-					line = git.CalculateFileLine(m.diffContent, m.diffCursor)
+					line = m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
 				} else {
-					line = git.CalculateFileLine(m.diffContent, 0)
+					line = m.vcs.CalculateFileLine(m.diffContent, 0)
 				}
-				return m, openFugitive(m.selectedPath, line)
+				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch)
 			}
 
 		case "e":
@@ -263,12 +314,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				line := 0
 				if m.focus == FocusDiff {
-					line = git.CalculateFileLine(m.diffContent, m.diffCursor)
+					line = m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
 				} else {
-					line = git.CalculateFileLine(m.diffContent, 0)
+					line = m.vcs.CalculateFileLine(m.diffContent, 0)
 				}
 				m.inputBuffer = ""
-				return m, openFugitive(m.selectedPath, line)
+				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch)
 			}
 
 		case "z":
@@ -376,17 +427,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diffViewport.GotoTop()
 				if m.pipedDiff != "" {
 					cmds = append(cmds, func() tea.Msg {
-						return git.DiffMsg{Content: git.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+						return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
 					})
 				} else {
-					cmds = append(cmds, git.DiffCmd(m.targetBranch, m.selectedPath))
+					cmds = append(cmds, m.vcs.DiffCmd(m.targetBranch, m.selectedPath))
 				}
 			}
 		}
 	}
 
 	switch msg := msg.(type) {
-	case git.DiffMsg:
+	case vcs.DiffMsg:
 		fullLines := strings.Split(msg.Content, "\n")
 
 		var cleanLines []string
@@ -422,27 +473,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffViewport.SetContent(newContent)
 		m.diffViewport.GotoTop()
 
-	case git.EditorFinishedMsg:
+	case vcs.EditorFinishedMsg:
 		if m.pipedDiff != "" {
 			return m, func() tea.Msg {
-				return git.DiffMsg{Content: git.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
+				return vcs.DiffMsg{Content: m.vcs.ExtractFileDiff(m.pipedDiff, m.selectedPath)}
 			}
 		}
-		return m, git.DiffCmd(m.targetBranch, m.selectedPath)
+		return m, m.vcs.DiffCmd(m.targetBranch, m.selectedPath)
 	}
 
 	return m, tea.Batch(cmds...)
-}
-
-func openFugitive(path string, line int) tea.Cmd {
-	lineArg := fmt.Sprintf("+%d", line)
-	c := exec.Command("nvim", lineArg, "-c", "Gvdiffsplit!", path)
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return git.EditorFinishedMsg{}
-	})
 }
 
 func (m *Model) centerDiffCursor() {
@@ -470,13 +510,20 @@ func (m *Model) updateSizes() {
 		treeWidth = 20
 	}
 
+	// PaneStyle has RoundedBorder (2 cols) + Padding(0,1) (2 cols) = 4 cols overhead
+	treePaneOverhead := 4
+	treeInnerWidth := treeWidth - treePaneOverhead
+	if treeInnerWidth < 10 {
+		treeInnerWidth = 10
+	}
+
 	listHeight := contentHeight - 2
 	if listHeight < 1 {
 		listHeight = 1
 	}
-	m.fileList.SetSize(treeWidth, listHeight)
+	m.fileList.SetSize(treeInnerWidth, listHeight)
 
-	m.diffViewport.Width = m.width - treeWidth - 4
+	m.diffViewport.Width = m.width - treeWidth
 	m.diffViewport.Height = listHeight
 }
 
@@ -512,7 +559,7 @@ func (m Model) View() string {
 		treeView := treeStyle.Copy().
 			Width(m.fileList.Width()).
 			Height(m.fileList.Height()).
-			MaxHeight(m.fileList.Height() + 2). // content + top/bottom border
+			MaxHeight(m.fileList.Height() + 2). // cap height: content + border
 			Render(m.fileList.View())
 
 		var rightPaneView string
@@ -523,33 +570,12 @@ func (m Model) View() string {
 		} else {
 			var renderedDiff strings.Builder
 
-			// Reserve 2 line for the file header
-			viewportHeight := m.diffViewport.Height - 2
+			viewportHeight := m.diffViewport.Height
 			start := m.diffViewport.YOffset
 			end := start + viewportHeight
 			if end > len(m.diffLines) {
 				end = len(m.diffLines)
 			}
-
-			added, deleted := 0, 0
-			for _, line := range m.diffLines {
-				clean := stripAnsi(line)
-				if strings.HasPrefix(clean, "+") && !strings.HasPrefix(clean, "+++") {
-					added++
-				} else if strings.HasPrefix(clean, "-") && !strings.HasPrefix(clean, "---") {
-					deleted++
-				}
-			}
-
-			headerStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Border(lipgloss.NormalBorder(), false, false, true, false).
-				BorderForeground(lipgloss.Color("236")).
-				Width(m.diffViewport.Width).
-				Padding(0, 1)
-
-			headerText := fmt.Sprintf("%s  (+%d / -%d)", m.selectedPath, added, deleted)
-			header := headerStyle.Render(headerText)
 
 			maxLineWidth := m.diffViewport.Width - 7
 			if maxLineWidth < 1 {
@@ -562,28 +588,18 @@ func (m Model) View() string {
 				line := ansi.Truncate(rawLine, maxLineWidth, "")
 
 				if strings.HasPrefix(cleanLine, "diff --git") ||
+					strings.HasPrefix(cleanLine, "diff -r ") ||
 					strings.HasPrefix(cleanLine, "index ") ||
 					strings.HasPrefix(cleanLine, "new file mode") ||
 					strings.HasPrefix(cleanLine, "old mode") ||
+					strings.HasPrefix(cleanLine, "--- a/") ||
 					strings.HasPrefix(cleanLine, "--- /dev/") ||
-					strings.HasPrefix(cleanLine, "+++ b/") {
+					strings.HasPrefix(cleanLine, "+++ b/") ||
+					strings.HasPrefix(cleanLine, "+++ /dev/") {
 					continue
 				}
 
 				if strings.HasPrefix(cleanLine, "@@") {
-					content := cleanLine
-					if idx := strings.LastIndex(content, "@@"); idx != -1 {
-						content = content[idx+2:]
-					}
-					content = strings.TrimSpace(content)
-
-					if content == "" {
-						content = "..."
-					}
-
-					divider := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("  › " + content)
-
-					renderedDiff.WriteString("     " + divider + "\n")
 					continue
 				}
 
@@ -593,7 +609,7 @@ func (m Model) View() string {
 				if mode != "hidden" {
 					isCursor := (i == m.diffCursor)
 					if isCursor && mode == "hybrid" {
-						realLine := git.CalculateFileLine(m.diffContent, m.diffCursor)
+						realLine := m.vcs.CalculateFileLine(m.diffContent, m.diffCursor)
 						numStr = fmt.Sprintf("%d", realLine)
 					} else if isCursor && mode == "relative" {
 						numStr = "0"
@@ -619,14 +635,14 @@ func (m Model) View() string {
 				renderedDiff.WriteString(lineNumRendered + line + "\n")
 			}
 
-			diffContentStr := strings.TrimRight(renderedDiff.String(), "\n")
+			diffContentStr := "\n" + strings.TrimRight(renderedDiff.String(), "\n")
 
 			diffView := DiffStyle.Copy().
 				Width(m.diffViewport.Width).
 				Height(viewportHeight).
 				Render(diffContentStr)
 
-			rightPaneView = lipgloss.JoinVertical(lipgloss.Top, header, diffView)
+			rightPaneView = diffView
 		}
 
 		mainContent = lipgloss.JoinHorizontal(lipgloss.Top, treeView, rightPaneView)
@@ -643,21 +659,74 @@ func (m Model) View() string {
 }
 
 func (m Model) renderTopBar() string {
-	repo := fmt.Sprintf(" %s", m.repoName)
-	branches := fmt.Sprintf(" %s ➜ %s", m.currentBranch, m.targetBranch)
-	info := fmt.Sprintf("%s   %s", repo, branches)
+	repo := fmt.Sprintf(" %s", m.repoName)
+	branches := fmt.Sprintf(" %s ➜ %s", m.currentBranch, m.targetBranch)
+	// Determine VCS type
+	vcsType := "git"
+	if m.vcs != nil {
+		if _, isHg := m.vcs.(vcs.HgVCS); isHg {
+			vcsType = "hg"
+		}
+	}
+	repoStats := ""
+	if m.statsAdded > 0 || m.statsDeleted > 0 {
+		repoStats = fmt.Sprintf(" +%d -%d", m.statsAdded, m.statsDeleted)
+	}
+	info := fmt.Sprintf("%s:%s %s%s", repo, vcsType, branches, repoStats)
 	leftSide := TopInfoStyle.Render(info)
 
-	middle := ""
-	if m.selectedPath != "" {
-		middle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(m.selectedPath)
-	}
-
+	// Right side: selected item path + stats
 	rightSide := ""
-	if m.statsAdded > 0 || m.statsDeleted > 0 {
-		added := TopStatsAddedStyle.Render(fmt.Sprintf("+%d", m.statsAdded))
-		deleted := TopStatsDeletedStyle.Render(fmt.Sprintf("-%d", m.statsDeleted))
-		rightSide = lipgloss.JoinHorizontal(lipgloss.Center, added, deleted)
+	if selectedItem, ok := m.fileList.SelectedItem().(tree.TreeItem); ok {
+		var displayPath string
+		var statsAdded, statsDeleted int
+
+		if selectedItem.IsDir {
+			// Directory: show dir path + sum of stats for all files under it.
+			// The trailing "/" on the prefix ensures we match only children of
+			// this directory and not sibling directories that share a common
+			// name prefix (e.g. "src/foo" won't match "src/foobar/baz").
+			displayPath = selectedItem.FullPath + "/"
+			prefix := selectedItem.FullPath + "/"
+			for filePath, stats := range m.fileStats {
+				if strings.HasPrefix(filePath, prefix) {
+					statsAdded += stats[0]
+					statsDeleted += stats[1]
+				}
+			}
+		} else {
+			// File: show file path + per-file stats.
+			// Prefer the pre-computed fileStats map (from --numstat/--stat)
+			// and fall back to currentFileAdded/Deleted (counted from the
+			// rendered diff) when the map hasn't been populated yet.
+			displayPath = selectedItem.FullPath
+			if fs, ok := m.fileStats[selectedItem.FullPath]; ok {
+				statsAdded = fs[0]
+				statsDeleted = fs[1]
+			} else {
+				statsAdded = m.currentFileAdded
+				statsDeleted = m.currentFileDeleted
+			}
+		}
+
+		fileStats := ""
+		if statsAdded > 0 || statsDeleted > 0 {
+			added := TopStatsAddedStyle.Render(fmt.Sprintf("+%d", statsAdded))
+			deleted := TopStatsDeletedStyle.Render(fmt.Sprintf("-%d", statsDeleted))
+			fileStats = lipgloss.JoinHorizontal(lipgloss.Center, added, deleted)
+		}
+		fileStatsWidth := lipgloss.Width(fileStats)
+		leftWidth := lipgloss.Width(leftSide)
+		maxPathWidth := m.width - leftWidth - fileStatsWidth - 4
+		if maxPathWidth < 10 {
+			maxPathWidth = 10
+		}
+		truncPath := ansi.Truncate(displayPath, maxPathWidth, "…")
+		if fileStats != "" {
+			rightSide = truncPath + " " + fileStats
+		} else {
+			rightSide = truncPath
+		}
 	}
 
 	availWidth := m.width - lipgloss.Width(leftSide) - lipgloss.Width(rightSide)
@@ -665,17 +734,10 @@ func (m Model) renderTopBar() string {
 		availWidth = 0
 	}
 
-	midWidth := lipgloss.Width(middle)
-	var centerBlock string
-	if midWidth > availWidth {
-		centerBlock = strings.Repeat(" ", availWidth)
-	} else {
-		padL := (availWidth - midWidth) / 2
-		padR := availWidth - midWidth - padL
-		centerBlock = strings.Repeat(" ", padL) + middle + strings.Repeat(" ", padR)
-	}
+	// Fill space between left and right
+	padding := strings.Repeat(" ", availWidth)
 
-	finalBar := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, centerBlock, rightSide)
+	finalBar := lipgloss.JoinHorizontal(lipgloss.Top, leftSide, padding, rightSide)
 	return TopBarStyle.Width(m.width).Render(finalBar)
 }
 
@@ -701,6 +763,10 @@ func (m Model) renderHelpDrawer() string {
 		HelpTextStyle.Render("H/M/L Move Cursor"),
 		HelpTextStyle.Render("e     Edit File"),
 	)
+	col5 := lipgloss.JoinVertical(lipgloss.Left,
+		HelpTextStyle.Render("Supports Git & Hg"),
+		HelpTextStyle.Render("--vcs git/hg"),
+	)
 
 	return HelpDrawerStyle.Copy().
 		Width(m.width).
@@ -712,24 +778,29 @@ func (m Model) renderHelpDrawer() string {
 			col3,
 			lipgloss.NewStyle().Width(4).Render(""),
 			col4,
+			lipgloss.NewStyle().Width(4).Render(""),
+			col5,
 		))
 }
 
 func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 	logo := EmptyLogoStyle.Render("difi")
-	desc := EmptyDescStyle.Render("A calm, focused way to review Git diffs.")
+	desc := EmptyDescStyle.Render("A calm, focused way to review Git & Mercurial diffs.")
 	status := EmptyStatusStyle.Render(statusMsg)
 
 	usageHeader := EmptyHeaderStyle.Render("Usage Patterns")
 	cmd1 := lipgloss.NewStyle().Foreground(ColorText).Render("difi")
-	desc1 := EmptyCodeStyle.Render("Diff against main")
-	cmd2 := lipgloss.NewStyle().Foreground(ColorText).Render("difi dev")
-	desc2 := EmptyCodeStyle.Render("Diff against branch")
+	desc1 := EmptyCodeStyle.Render("Auto-detect VCS, diff against main/tip")
+	cmd2 := lipgloss.NewStyle().Foreground(ColorText).Render("difi --vcs git")
+	desc2 := EmptyCodeStyle.Render("Force Git mode")
+	cmd3 := lipgloss.NewStyle().Foreground(ColorText).Render("difi --vcs hg")
+	desc3 := EmptyCodeStyle.Render("Force Mercurial mode")
 
 	usageBlock := lipgloss.JoinVertical(lipgloss.Left,
 		usageHeader,
 		lipgloss.JoinHorizontal(lipgloss.Left, cmd1, "    ", desc1),
 		lipgloss.JoinHorizontal(lipgloss.Left, cmd2, "    ", desc2),
+		lipgloss.JoinHorizontal(lipgloss.Left, cmd3, "    ", desc3),
 	)
 
 	navHeader := EmptyHeaderStyle.Render("Navigation")
@@ -786,6 +857,5 @@ func (m Model) renderEmptyState(w, h int, statusMsg string) string {
 }
 
 func stripAnsi(str string) string {
-	re := regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
-	return re.ReplaceAllString(str, "")
+	return ansiRe.ReplaceAllString(str, "")
 }

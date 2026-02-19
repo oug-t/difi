@@ -27,18 +27,24 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 	title := i.Title()
 
-	maxWidth := m.Width() - 2 // pane has Padding(0,1) = 2 chars horizontal
-	if maxWidth < 1 {
-		maxWidth = 1
+	// Truncate to list width to prevent line wrapping that inflates pane height.
+	// Subtract 2 for safety margin: Nerd Font icons may render wider than
+	// ansi.StringWidth reports (double-width glyphs).
+	maxWidth := m.Width() - 2
+	if maxWidth < 4 {
+		maxWidth = 4
 	}
 	title = ansi.Truncate(title, maxWidth, "…")
 
 	if index == m.Index() {
+		// Width (not MaxWidth) ensures every row renders to a consistent width,
+		// filling the selection highlight background fully and preventing
+		// stale-character artifacts when content shrinks between frames.
 		style := lipgloss.NewStyle().
-			Width(maxWidth).
 			Background(lipgloss.Color("237")). // Dark gray background
 			Foreground(lipgloss.Color("255")). // White text
-			Bold(true)
+			Bold(true).
+			Width(maxWidth)
 
 		if !d.Focused {
 			style = style.Foreground(lipgloss.Color("245"))
@@ -46,7 +52,9 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 		fmt.Fprint(w, style.Render(title))
 	} else {
-		style := lipgloss.NewStyle().Width(maxWidth).Foreground(lipgloss.Color("252"))
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("252")).
+			Width(maxWidth)
 		fmt.Fprint(w, style.Render(title))
 	}
 }

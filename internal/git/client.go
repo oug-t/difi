@@ -11,8 +11,21 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+
+var hunkHeaderRe = regexp.MustCompile(`^.*?@@ \-\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+
+// gitCmd creates a git command with --no-pager and environment variables
+// to bypass user configuration that could affect output parsing.
+func gitCmd(args ...string) *exec.Cmd {
+	fullArgs := append([]string{"--no-pager"}, args...)
+	cmd := exec.Command("git", fullArgs...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	return cmd
+}
+
 func GetCurrentBranch() string {
-	out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	out, err := gitCmd("rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return "HEAD"
 	}
@@ -20,7 +33,7 @@ func GetCurrentBranch() string {
 }
 
 func GetRepoName() string {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	out, err := gitCmd("rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		return "Repo"
 	}
@@ -33,7 +46,7 @@ func GetRepoName() string {
 }
 
 func ListChangedFiles(targetBranch string) ([]string, error) {
-	cmd := exec.Command("git", "diff", "--name-only", targetBranch)
+	cmd := gitCmd("diff", "--name-only", targetBranch)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -47,7 +60,7 @@ func ListChangedFiles(targetBranch string) ([]string, error) {
 
 func DiffCmd(targetBranch, path string) tea.Cmd {
 	return func() tea.Msg {
-		out, err := exec.Command("git", "diff", "--color=always", targetBranch, "--", path).Output()
+		out, err := gitCmd("diff", "--color=always", targetBranch, "--", path).Output()
 		if err != nil {
 			return DiffMsg{Content: "Error fetching diff: " + err.Error()}
 		}
@@ -82,7 +95,7 @@ func OpenEditorCmd(path string, lineNumber int, targetBranch string) tea.Cmd {
 }
 
 func DiffStats(targetBranch string) (added int, deleted int, err error) {
-	cmd := exec.Command("git", "diff", "--numstat", targetBranch)
+	cmd := gitCmd("diff", "--numstat", targetBranch)
 	out, err := cmd.Output()
 	if err != nil {
 		return 0, 0, fmt.Errorf("git diff stats error: %w", err)
@@ -113,26 +126,60 @@ func DiffStats(targetBranch string) (added int, deleted int, err error) {
 	return added, deleted, nil
 }
 
+func DiffStatsByFile(targetBranch string) (map[string][2]int, error) {
+	cmd := gitCmd("diff", "--numstat", targetBranch)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff numstat error: %w", err)
+	}
+
+	result := make(map[string][2]int)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			continue
+		}
+		var a, d int
+		if parts[0] != "-" {
+			a, _ = strconv.Atoi(parts[0])
+		}
+		if parts[1] != "-" {
+			d, _ = strconv.Atoi(parts[1])
+		}
+		filePath := strings.Join(parts[2:], " ")
+		if idx := strings.LastIndex(filePath, " => "); idx != -1 {
+			filePath = filePath[idx+4:]
+		}
+		result[filePath] = [2]int{a, d}
+	}
+	return result, nil
+}
+
 func CalculateFileLine(diffContent string, visualLineIndex int) int {
 	lines := strings.Split(diffContent, "\n")
 	if visualLineIndex >= len(lines) {
 		return 0
 	}
 
-	re := regexp.MustCompile(`^.*?@@ \-\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
-
 	currentLineNo := 0
+	lastWasHunk := false
 
 	for i := 0; i <= visualLineIndex; i++ {
 		line := lines[i]
 
-		matches := re.FindStringSubmatch(line)
+		matches := hunkHeaderRe.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			startLine, _ := strconv.Atoi(matches[1])
 			currentLineNo = startLine
+			lastWasHunk = true
 			continue
 		}
 
+		lastWasHunk = false
 		cleanLine := stripAnsi(line)
 		if strings.HasPrefix(cleanLine, " ") || strings.HasPrefix(cleanLine, "+") {
 			currentLineNo++
@@ -142,13 +189,14 @@ func CalculateFileLine(diffContent string, visualLineIndex int) int {
 	if currentLineNo == 0 {
 		return 1
 	}
+	if lastWasHunk {
+		return currentLineNo
+	}
 	return currentLineNo - 1
 }
 
 func stripAnsi(str string) string {
-	const ansi = "[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))"
-	var re = regexp.MustCompile(ansi)
-	return re.ReplaceAllString(str, "")
+	return ansiRe.ReplaceAllString(str, "")
 }
 
 type DiffMsg struct{ Content string }
