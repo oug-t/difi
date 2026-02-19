@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/oug-t/difi/internal/tree"
 )
 
@@ -26,8 +27,15 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 	title := i.Title()
 
+	maxWidth := m.Width() - 2 // pane has Padding(0,1) = 2 chars horizontal
+	if maxWidth < 1 {
+		maxWidth = 1
+	}
+	title = ansi.Truncate(title, maxWidth, "…")
+
 	if index == m.Index() {
 		style := lipgloss.NewStyle().
+			Width(maxWidth).
 			Background(lipgloss.Color("237")). // Dark gray background
 			Foreground(lipgloss.Color("255")). // White text
 			Bold(true)
@@ -38,7 +46,7 @@ func (d TreeDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 
 		fmt.Fprint(w, style.Render(title))
 	} else {
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+		style := lipgloss.NewStyle().Width(maxWidth).Foreground(lipgloss.Color("252"))
 		fmt.Fprint(w, style.Render(title))
 	}
 }

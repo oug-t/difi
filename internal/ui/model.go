@@ -512,6 +512,7 @@ func (m Model) View() string {
 		treeView := treeStyle.Copy().
 			Width(m.fileList.Width()).
 			Height(m.fileList.Height()).
+			MaxHeight(m.fileList.Height() + 2). // content + top/bottom border
 			Render(m.fileList.View())
 
 		var rightPaneView string
