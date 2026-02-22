@@ -27,8 +27,8 @@ func (g GitVCS) DiffCmd(targetBranch, path string) tea.Cmd {
 		return msg
 	}
 }
-func (g GitVCS) OpenEditorCmd(path string, lineNumber int, targetBranch string) tea.Cmd {
-	gitCmd := git.OpenEditorCmd(path, lineNumber, targetBranch)
+func (g GitVCS) OpenEditorCmd(path string, lineNumber int, targetBranch string, editor string) tea.Cmd {
+	gitCmd := git.OpenEditorCmd(path, lineNumber, targetBranch, editor)
 	return func() tea.Msg {
 		msg := gitCmd()
 		if gitMsg, ok := msg.(git.EditorFinishedMsg); ok {
@@ -66,8 +66,8 @@ func (h HgVCS) DiffCmd(targetBranch, path string) tea.Cmd {
 		return msg
 	}
 }
-func (h HgVCS) OpenEditorCmd(path string, lineNumber int, targetBranch string) tea.Cmd {
-	hgCmd := hg.OpenEditorCmd(path, lineNumber, targetBranch)
+func (h HgVCS) OpenEditorCmd(path string, lineNumber int, targetBranch string, editor string) tea.Cmd {
+	hgCmd := hg.OpenEditorCmd(path, lineNumber, targetBranch, editor)
 	return func() tea.Msg {
 		msg := hgCmd()
 		if hgMsg, ok := msg.(hg.EditorFinishedMsg); ok {
@@ -91,42 +91,34 @@ func (h HgVCS) ExtractFileDiff(diffText, targetPath string) string {
 }
 
 func DetectVCS() VCS {
-	// Check current directory and walk up to find VCS root
 	dir, err := os.Getwd()
 	if err != nil {
-		return GitVCS{} // Default to Git
+		return GitVCS{}
 	}
 
-	// First pass: look for Git repositories only
 	checkDir := dir
 	for {
 		if _, err := os.Stat(filepath.Join(checkDir, ".git")); err == nil {
 			return GitVCS{}
 		}
-
 		parent := filepath.Dir(checkDir)
 		if parent == checkDir {
-			// Reached root directory
 			break
 		}
 		checkDir = parent
 	}
 
-	// Second pass: look for Mercurial repositories only if Git wasn't found
 	checkDir = dir
 	for {
 		if _, err := os.Stat(filepath.Join(checkDir, ".hg")); err == nil {
 			return HgVCS{}
 		}
-
 		parent := filepath.Dir(checkDir)
 		if parent == checkDir {
-			// Reached root directory
 			break
 		}
 		checkDir = parent
 	}
 
-	// Default to Git if no VCS found
 	return GitVCS{}
 }

@@ -81,7 +81,11 @@ func NewModel(cfg config.Config, targetBranch string, pipedDiff string, vcsClien
 	t := tree.New(files)
 	items := t.Items()
 
-	delegate := TreeDelegate{Focused: true}
+	delegate := TreeDelegate{
+		Config:  cfg,
+		Focused: true,
+	}
+
 	l := list.New(items, delegate, 0, 0)
 
 	l.SetShowTitle(false)
@@ -303,7 +307,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					line = m.vcs.CalculateFileLine(m.diffContent, 0)
 				}
-				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch)
+				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch, m.treeDelegate.Config.Editor)
 			}
 
 		case "e":
@@ -319,7 +323,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					line = m.vcs.CalculateFileLine(m.diffContent, 0)
 				}
 				m.inputBuffer = ""
-				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch)
+				return m, m.vcs.OpenEditorCmd(m.selectedPath, line, m.targetBranch, m.treeDelegate.Config.Editor)
 			}
 
 		case "z":

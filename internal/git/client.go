@@ -11,12 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-var ansiRe = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
-
+var ansiRe = regexp.MustCompile(`[\x1b\x9b][[\\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[a-zA-Z\d]*)*)?\x07)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PRZcf-ntqry=><~]))`)
 var hunkHeaderRe = regexp.MustCompile(`^.*?@@ \-\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
-// gitCmd creates a git command with --no-pager and environment variables
-// to bypass user configuration that could affect output parsing.
 func gitCmd(args ...string) *exec.Cmd {
 	fullArgs := append([]string{"--no-pager"}, args...)
 	cmd := exec.Command("git", fullArgs...)
@@ -68,16 +65,7 @@ func DiffCmd(targetBranch, path string) tea.Cmd {
 	}
 }
 
-func OpenEditorCmd(path string, lineNumber int, targetBranch string) tea.Cmd {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		if _, err := exec.LookPath("nvim"); err == nil {
-			editor = "nvim"
-		} else {
-			editor = "vim"
-		}
-	}
-
+func OpenEditorCmd(path string, lineNumber int, targetBranch string, editor string) tea.Cmd {
 	var args []string
 	if lineNumber > 0 {
 		args = append(args, fmt.Sprintf("+%d", lineNumber))
@@ -86,7 +74,6 @@ func OpenEditorCmd(path string, lineNumber int, targetBranch string) tea.Cmd {
 
 	c := exec.Command(editor, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-
 	c.Env = append(os.Environ(), fmt.Sprintf("DIFI_TARGET=%s", targetBranch))
 
 	return tea.ExecProcess(c, func(err error) tea.Msg {
@@ -116,7 +103,6 @@ func DiffStats(targetBranch string) (added int, deleted int, err error) {
 				added += n
 			}
 		}
-
 		if parts[1] != "-" {
 			if n, err := strconv.Atoi(parts[1]); err == nil {
 				deleted += n
@@ -170,7 +156,6 @@ func CalculateFileLine(diffContent string, visualLineIndex int) int {
 
 	for i := 0; i <= visualLineIndex; i++ {
 		line := lines[i]
-
 		matches := hunkHeaderRe.FindStringSubmatch(line)
 		if len(matches) > 1 {
 			startLine, _ := strconv.Atoi(matches[1])
@@ -226,18 +211,15 @@ func ExtractFileDiff(diffText, targetPath string) string {
 	lines := strings.Split(diffText, "\n")
 	var out []string
 	inTarget := false
-
 	targetHeader := fmt.Sprintf("diff --git a/%s b/%s", targetPath, targetPath)
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "diff --git ") {
 			inTarget = strings.HasPrefix(line, targetHeader)
 		}
-
 		if inTarget {
 			out = append(out, line)
 		}
 	}
-
 	return strings.Join(out, "\n")
 }
