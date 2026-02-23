@@ -153,6 +153,7 @@ func CalculateFileLine(diffContent string, visualLineIndex int) int {
 
 	currentLineNo := 0
 	lastWasHunk := false
+	inHeader := true
 
 	for i := 0; i <= visualLineIndex; i++ {
 		line := lines[i]
@@ -161,11 +162,17 @@ func CalculateFileLine(diffContent string, visualLineIndex int) int {
 			startLine, _ := strconv.Atoi(matches[1])
 			currentLineNo = startLine
 			lastWasHunk = true
+			inHeader = false
 			continue
 		}
 
 		lastWasHunk = false
 		cleanLine := stripAnsi(line)
+
+		if inHeader {
+			continue
+		}
+
 		if strings.HasPrefix(cleanLine, " ") || strings.HasPrefix(cleanLine, "+") {
 			currentLineNo++
 		}
@@ -175,7 +182,7 @@ func CalculateFileLine(diffContent string, visualLineIndex int) int {
 		return 1
 	}
 	if lastWasHunk {
-		return currentLineNo
+		return currentLineNo - 1
 	}
 	return currentLineNo - 1
 }
